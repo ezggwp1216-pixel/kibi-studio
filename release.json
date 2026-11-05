@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "archive": "kibi-studio-local.zip",
+  "sha256": "e4a614728df971af44b2bce2515f56b6e15a6be56ed06fad24987cdbd89086a1",
+  "bytes": 20881515,
+  "expandedBytes": 71896263,
+  "fileCount": 2524,
+  "root": "kibi-studio",
+  "version": "0.2.0",
+  "platform": "darwin",
+  "bootstrapSha256": "e58a2be4863478ba4c7f484df679681d81bbd793309d8161051f8c7f2b675d3d",
+  "manifestSha256": "2b82359271df398f076f4767c94b443f6aaa65d85e0b27f6d7856966ad8a743f"
+}

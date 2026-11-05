@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/ezggwp1216-pixel/kibi-studio",
+  "defaultBranch": "main",
+  "releaseFile": "release.json",
+  "archive": "kibi-studio-local.zip",
+  "manifest": "kibi-studio-local.manifest.json",
+  "bootstrap": "bootstrap.py"
+}
