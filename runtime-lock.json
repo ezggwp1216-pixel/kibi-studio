@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "nodeVersion": "24.22.2",
+  "codexVersion": "0.166.0",
+  "codex": {
+    "arm64": {
+      "url": "https://registry.npmjs.org/@openai/codex/-/codex-0.166.0-darwin-arm64.tgz",
+      "integrity": "sha512-5fWH6qqUInACcRADIewjlnRxDb4QLe0uriwehiZz0+viuAAB8I+WWefqw4xwHvyKaxeiGX4uK56+vrgfvFk3FQ==",
+      "target": "aarch64-apple-darwin"
+    },
+    "x64": {
+      "url": "https://registry.npmjs.org/@openai/codex/-/codex-0.166.0-darwin-x64.tgz",
+      "integrity": "sha512-Vj5wXJPizKmrzNtnRNQf9PP6FJkG3iJU/UO3NE4WvkENZGoQfmImdwf4MVRI5NgwjSuC6LT0HbBRHPVVnwGHuw==",
+      "target": "x86_64-apple-darwin"
+    }
+  },
+  "sources": ["https://nodejs.org/dist/v24.22.2/SHASUMS256.txt", "https://registry.npmjs.org/@openai/codex/0.166.0-darwin-arm64", "https://registry.npmjs.org/@openai/codex/0.166.0-darwin-x64", "https://learn.chatgpt.com/docs/codex/cli"]
+}

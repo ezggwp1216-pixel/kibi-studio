@@ -5,5 +5,5 @@
   "releaseFile": "release.json",
   "archive": "kibi-studio-local.zip",
   "manifest": "kibi-studio-local.manifest.json",
-  "bootstrap": "bootstrap.py"
+  "bootstrap": "bootstrap.sh"
 }
