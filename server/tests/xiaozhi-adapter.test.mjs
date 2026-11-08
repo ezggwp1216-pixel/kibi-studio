@@ -79,8 +79,18 @@ test('closing wakes a stalled upstream write immediately instead of leaving an o
 test('a stalled device cannot accumulate unlimited generated speech',async()=>{
  const device=[];const f=fixture({sendDevice:async(payload,meta)=>{device.push({payload,meta});if(meta.binary)await new Promise(()=>{});}});
  try{await open(f);await f.event({type:'input_audio_buffer.speech_stopped'});await f.event({type:'response.created',response:{id:'long'}});
- for(let n=0;n<30&&!f.adapter.snapshot().closed;n++)await f.event({type:'response.output_audio.delta',response_id:'long',item_id:'item-long',delta:pcm(24000,14400).toString('base64')});
- assert.equal(f.adapter.snapshot().code,'output_backpressure');assert.ok(f.adapter.snapshot().metrics.peakOutputBytes<=512000);assert.equal(f.closed,1);
+ for(let n=0;n<160&&!f.adapter.snapshot().closed;n++)await f.event({type:'response.output_audio.delta',response_id:'long',item_id:'item-long',delta:pcm(24000,14400).toString('base64')});
+ assert.equal(f.adapter.snapshot().code,'output_backpressure');assert.ok(f.adapter.snapshot().metrics.peakOutputBytes<=512000);assert.ok(f.adapter.snapshot().metrics.peakOutputMessages<=1500);assert.equal(f.closed,1);
+ }finally{await f.adapter.close();}
+});
+
+test('mixed transcript output still hits the encoded-byte bound before its message allowance',async()=>{
+ const f=fixture({sendDevice:async(_payload,meta)=>{if(meta.binary)await new Promise(()=>{});}});
+ try{await open(f);await f.event({type:'input_audio_buffer.speech_stopped'});await f.event({type:'response.created',response:{id:'bounded-text'}});
+ await f.event({type:'response.output_audio.delta',response_id:'bounded-text',item_id:'item-bounded-text',delta:pcm(24000,1440).toString('base64')});
+ for(let n=0;n<70&&!f.adapter.snapshot().closed;n++)await f.event({type:'response.output_audio_transcript.delta',response_id:'bounded-text',delta:'x'.repeat(8192)});
+ assert.equal(f.adapter.snapshot().code,'output_backpressure');assert.ok(f.adapter.snapshot().metrics.peakOutputBytes<=512000);
+ assert.ok(f.adapter.snapshot().metrics.peakOutputMessages<100);assert.equal(f.closed,1);
  }finally{await f.adapter.close();}
 });
 

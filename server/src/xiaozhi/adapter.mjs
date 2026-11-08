@@ -3,7 +3,11 @@ import {createOpusCodec} from './codec.mjs';
 import {PcmResampler} from './resample.mjs';
 import {connectOpenAI,validateOpenAIConfiguration} from './openai-socket.mjs';
 
-const INPUT_LIMIT=65536,OUTPUT_LIMIT=512000,OUTPUT_PACKETS=250,EVENT_LIMIT=131072;
+const RESPONSE_TIMEOUT_MS=90000,OUTPUT_FRAME_MS=60;
+// Realtime audio may be generated faster than playout. Allow at most the
+// existing 90-second response window in queued messages (1500 x 60 ms),
+// including transcript/control messages, while retaining the encoded-byte cap.
+const INPUT_LIMIT=65536,OUTPUT_LIMIT=512000,OUTPUT_PACKETS=RESPONSE_TIMEOUT_MS/OUTPUT_FRAME_MS,EVENT_LIMIT=131072;
 const codes=new Set(['configuration_required','unsupported_endpoint','device_protocol_invalid','codec_failed','input_backpressure','output_backpressure','authentication_required','quota_or_rate_limit','provider_error','provider_protocol_invalid','network_error','tls_failed','timeout','cancelled','closed','ready','connecting','idle']);
 const failure=code=>Object.assign(new Error(codes.has(code)?code:'provider_error'),{code:codes.has(code)?code:'provider_error'});
 const providerFailure=error=>['invalid_api_key','authentication_error'].includes(error?.code)?'authentication_required':['insufficient_quota','rate_limit_exceeded'].includes(error?.code)?'quota_or_rate_limit':'provider_error';
@@ -17,7 +21,7 @@ const validId=value=>typeof value==='string'&&value.length>0&&value.length<=256;
 export function createXiaozhiOpenAIAdapter({configuration,sendDevice,connect=connectOpenAI,createCodec=createOpusCodec,signal,onStatus}={}){
  if(typeof sendDevice!=='function')throw failure('device_protocol_invalid');
  const sessionId=randomUUID(),lifetime=new AbortController(),up=new PcmResampler(16000,24000),down=new PcmResampler(24000,16000);
- const metrics={inputPackets:0,inputPcmBytes:0,outputPackets:0,outputPcmBytes:0,turnsCompleted:0,pendingInputBytes:0,pendingOutputBytes:0,peakInputBytes:0,peakOutputBytes:0};
+ const metrics={inputPackets:0,inputPcmBytes:0,outputPackets:0,outputPcmBytes:0,turnsCompleted:0,pendingInputBytes:0,pendingOutputBytes:0,pendingOutputMessages:0,peakInputBytes:0,peakOutputBytes:0,peakOutputMessages:0};
  let state='idle',closed=false,helloSeen=false,listening=false,connection,codec,providerReady=false,readyResolve,readyReject;
  let inputTail=Promise.resolve(),eventTail=Promise.resolve(),eventBytes=0,inputPacketsPending=0,pumping=false,generation=0,nextPacketAt=0,expectingResponse=false,current=null,responseDeadline;
  const outbox=[],timers=new Set(),operations=new Set(),stale=new Set(),playbacks=new Map();
@@ -31,7 +35,7 @@ export function createXiaozhiOpenAIAdapter({configuration,sendDevice,connect=con
  });}
  async function close(code='closed'){
   if(closed)return;closed=true;listening=false;generation++;status(codes.has(code)?code:'provider_error');lifetime.abort();
-  readyReject?.(failure(state));outbox.length=0;metrics.pendingOutputBytes=0;
+  readyReject?.(failure(state));outbox.length=0;metrics.pendingOutputBytes=0;metrics.pendingOutputMessages=0;
   signal?.removeEventListener('abort',cancel);
   for(const stop of [...operations])stop();for(const timer of timers)clearTimeout(timer);timers.clear();
   try{connection?.close();}catch{}connection=null;
@@ -47,13 +51,13 @@ export function createXiaozhiOpenAIAdapter({configuration,sendDevice,connect=con
   if(closed)return;
   const bytes=binary?payload.length:Buffer.byteLength(JSON.stringify(payload));
   if(metrics.pendingOutputBytes+bytes>OUTPUT_LIMIT||outbox.length>=OUTPUT_PACKETS){fatal('output_backpressure');return;}
-  outbox.push({payload,binary,response,kind,actualSamples,generation:response?generation:null,bytes});metrics.pendingOutputBytes+=bytes;metrics.peakOutputBytes=Math.max(metrics.peakOutputBytes,metrics.pendingOutputBytes);
+  outbox.push({payload,binary,response,kind,actualSamples,generation:response?generation:null,bytes});metrics.pendingOutputBytes+=bytes;metrics.pendingOutputMessages=outbox.length;metrics.peakOutputBytes=Math.max(metrics.peakOutputBytes,metrics.pendingOutputBytes);metrics.peakOutputMessages=Math.max(metrics.peakOutputMessages,outbox.length);
   void pump();
  }
  async function pump(){
   if(pumping||closed)return;pumping=true;
   try{while(outbox.length&&!closed){
-   const item=outbox.shift();metrics.pendingOutputBytes-=item.bytes;
+   const item=outbox.shift();metrics.pendingOutputBytes-=item.bytes;metrics.pendingOutputMessages=outbox.length;
    if(item.generation!==null&&item.generation!==generation)continue;
    if(item.binary||item.kind==='stop'){
     const wait=nextPacketAt-Date.now();if(wait>0)await bounded(new Promise(resolve=>{const t=setTimeout(()=>{timers.delete(t);resolve();},wait);timers.add(t);}),Math.max(1000,wait+100));
@@ -61,7 +65,7 @@ export function createXiaozhiOpenAIAdapter({configuration,sendDevice,connect=con
    }
    await bounded(sendDevice(item.payload,{binary:item.binary}));
    if(closed||item.generation!==null&&item.generation!==generation)continue;
-   if(item.binary){metrics.outputPackets++;item.response.deliveredSamples+=item.actualSamples;nextPacketAt=Date.now()+60;}
+   if(item.binary){metrics.outputPackets++;item.response.deliveredSamples+=item.actualSamples;nextPacketAt=Date.now()+OUTPUT_FRAME_MS;}
    // A completed transport write is not a speaker/DMA playback acknowledgement.
    if(item.kind==='stop')item.response.transportDone=true;
   }}catch(error){fatal(error?.code==='timeout'?'timeout':'network_error');}finally{pumping=false;}
@@ -80,7 +84,7 @@ export function createXiaozhiOpenAIAdapter({configuration,sendDevice,connect=con
  function fullyPlayed(response){return response.done&&response.transportDone&&response.acknowledgedMs!==null&&response.acknowledgedMs>=Math.floor(response.totalSamples/16);}
  async function interrupt(reason){
   if(!current||current.interrupted||fullyPlayed(current))return;
-  const old=current;old.interrupted=true;forget(old.id);generation++;outbox.length=0;metrics.pendingOutputBytes=0;nextPacketAt=0;old.tail=Buffer.alloc(0);current=null;down.reset();codec?.resetEncoder();
+  const old=current;old.interrupted=true;forget(old.id);generation++;outbox.length=0;metrics.pendingOutputBytes=0;metrics.pendingOutputMessages=0;nextPacketAt=0;old.tail=Buffer.alloc(0);current=null;down.reset();codec?.resetEncoder();
   // Flush is a Kibi extension: the device must discard queued decoder/DMA audio.
   enqueue(control('tts',{state:'stop',reason,flush:true,response_id:old.id,playback_id:old.playbackId}));
   if(reason==='client_abort'&&!old.done)await sendProvider({type:'response.cancel',response_id:old.id});
@@ -109,7 +113,7 @@ export function createXiaozhiOpenAIAdapter({configuration,sendDevice,connect=con
    if(stale.has(id))return;
    if(!expectingResponse){forget(id);return;}
    if(current&&!current.transportDone)await interrupt('superseded');
-   expectingResponse=false;responseTimeout(90000);generation++;down.reset();codec.resetEncoder();
+   expectingResponse=false;responseTimeout(RESPONSE_TIMEOUT_MS);generation++;down.reset();codec.resetEncoder();
    current={id,playbackId:randomUUID(),itemId:null,contentIndex:0,tail:Buffer.alloc(0),started:false,done:false,transportDone:false,interrupted:false,totalSamples:0,deliveredSamples:0,acknowledgedMs:null};
    // Retain only recent correlation/duration state. Old PCM tails are empty after
    // completion/interruption; no transcript or whole audio response is retained.
