@@ -1,0 +1,44 @@
+Kibi Server frontend implementation report
+
+Files: web/index.html, web/styles.css, web/app.js.
+Dependency-free Russian operating panel using bundled Manrope and Kibi mark.
+
+Implemented
+- Administrator login/logout and session restoration; CSRF token kept in memory.
+- Real server overview, device count, event feed, module states and authenticated polling.
+- Explicit pending, empty, disconnected, validation and retry states; no sample devices/events.
+- Device creation and one-time token display/copy; token cleared when dialog closes.
+- Revocation confirmation and queued message submission with honest delivery wording.
+- Test events explain their potential real Telegram delivery before submission.
+- Telegram secret settings, enabled flag, explicit send test and credential deletion.
+- OpenAI secret settings, model and character instructions; explicit stateless paid text test.
+- Voice and schedules marked planned, with explanatory disclosures.
+- Local/Docker steps and copyable AI bootstrap prompt point to the public server source.
+- Keyboard tabs, native modal dialogs, labels, focus styles, mobile layout and reduced-motion rules.
+- Refresh preserves form drafts; successful secret saves clear secret fields.
+- No inline scripts/styles, browser credential storage or browser requests to upstream providers.
+
+Executed verification
+- node --check web/app.js: passed.
+- HTML structure check: 86 unique IDs; all static label, ARIA and JavaScript ID references resolve.
+- Static checks found no inline scripts/styles, localStorage/sessionStorage or direct upstream fetch.
+- API paths, methods and bodies checked against docs/API.md, including text AI additions.
+
+Browser verification
+- Root agent owns IAB runtime and visual verification. Initial screenshot reviewed as coherent.
+- Full narrow/desktop interaction, keyboard, clipboard and error checks remain root integration work.
+- No screen-reader or comprehensive accessibility certification claimed.
+- No external Telegram or OpenAI request performed by this implementation task.
+
+Copy/hierarchy follow-up
+- Login and overview explain a deployable AI server with selectable model and character.
+- Overview leads with explicit AI setup; device creation remains immediately available.
+- Onboarding: private AI configuration, device/token connection, explicit AI and event checks.
+- AI configuration is first in Modules; form IDs, API behavior and live statuses are unchanged.
+
+Narrow navigation follow-up
+- Root browser check located horizontal overflow in the four-tab navigation at 320 CSS px.
+- Cause: a single flex row with nowrap labels exceeded the available content width.
+- At widths up to 480 px, tabs now reflow into two equal grid columns with wrapping labels.
+- All four controls and their focus outlines remain available; body overflow is not hidden.
+- Root browser recheck is required to confirm the resulting document width.

@@ -1,0 +1,9 @@
+# Allow only application runtime files into the image build context.
+**
+!package.json
+!src/
+!src/**
+!scripts/
+!scripts/init.mjs
+!web/
+!web/**

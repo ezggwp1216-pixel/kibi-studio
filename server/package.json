@@ -1,0 +1,13 @@
+{
+  "name": "kibi-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Самостоятельный ИИ-сервер Киби: модель, характер, устройства и интеграции",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test",
+    "init": "node scripts/init.mjs"
+  }
+}

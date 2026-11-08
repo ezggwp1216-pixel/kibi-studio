@@ -1,0 +1,52 @@
+Kibi Server — проверка комплекта развёртывания
+Дата: 2026-11-08
+
+Проверено:
+- Node.js 24.21.0; runtime npm-зависимости отсутствуют.
+- npm test: 21/21 на этапе проверки комплекта. Включены 8 тестов init
+  и проверки API устройств, сессий, CSRF, сохранения состояния,
+  отзывов токенов, Telegram и OpenAI с подменным внешним транспортом.
+- init: отдельный случайный пароль без вывода, каталог 0700 и файл 0600;
+  повторный запуск сохраняет пароль/ключ/состояние; symlink/hardlink
+  отвергаются; отсутствие пароля в непустой базе не создаёт замену;
+  --help и неизвестные аргументы не создают данные.
+- Настоящий CLI: init -> запуск -> HTTP health -> вход с паролем из
+  файла внутри процесса -> создание устройства -> остановка процесса ->
+  новый запуск -> вход -> устройство сохранилось. Секреты не выводились.
+- scripts/init.mjs прошёл проверку синтаксиса Node.
+- compose.yaml и compose.https.yaml разобраны стандартным YAML-парсером.
+- Docker build context задан allowlist: только package.json, src,
+  scripts/init.mjs и web. .data, .env, Git, архивы, журналы и тесты
+  не включаются. COPY в образе перечисляет только runtime-файлы.
+- Проверены непривилегированный UID, read-only корень, cap_drop ALL,
+  no-new-privileges, loopback4391, постоянный bind-каталог и healthcheck.
+- Caddy 2.11.9-alpine указан в метаданных Docker Official Images;
+  официальный Dockerfile создаёт /data/caddy и /config/caddy с mode1777,
+  а XDG_DATA_HOME/XDG_CONFIG_HOME — /data и /config. Именованные тома
+  получают начальное содержимое образа; UID1000 использует эти подкаталоги.
+  Внутренние порты 8080/8443 не требуют root/cap_net_bind_service.
+- Документация содержит локальный/контейнерный init, просмотр пароля
+  самим владельцем без чата, точный Origin, DNS/HTTPS, проверку устройства,
+  резервную копию всей .data и согласованное восстановление/обновление.
+
+Не проверено и не заявляется как выполненное:
+- Docker/Compose/Caddy отсутствовали в среде проверки. Образ не собран,
+  контейнеры не запущены, docker compose config и caddy validate не выполнены.
+  Проверка YAML и исходного Dockerfile не заменяет живой запуск контейнера.
+- Публичный VPS, реальный DNS, выпуск TLS-сертификата, firewall и перезапуск
+  хоста не настраивались. На сервере владельца эти проверки обязательны.
+- Реальные сообщения Telegram и платные OpenAI-запросы не отправлялись.
+  Проверенные mock-пути не подтверждают доступ конкретного ключа/модели/чата.
+- Физическая плата, её HTTPS-клиент и прошивка не интегрировались и
+  не собирались. Голос и расписания остаются запланированными.
+- Браузерные проверки панели и финальная публикация выполняются отдельно;
+  этот отчёт не заменяет их результаты.
+
+Первичные источники:
+https://docs.docker.com/reference/compose-file/services/
+https://docs.docker.com/engine/install/
+https://caddyserver.com/docs/automatic-https
+https://raw.githubusercontent.com/docker-library/official-images/master/library/caddy
+https://github.com/caddyserver/caddy-docker/blob/d322e6686bbce5622d98a04c84fadd43b5eb8c58/2.11/alpine/Dockerfile
+https://core.telegram.org/bots/api#sendmessage
+https://developers.openai.com/api/docs/guides/text

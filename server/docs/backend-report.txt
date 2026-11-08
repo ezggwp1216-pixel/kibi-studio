@@ -1,0 +1,61 @@
+Task 1 backend report — 2026-11-08
+
+Changed only assigned backend files:
+- src/server.mjs: standard async http.Server factory, local CLI, exact JSON API,
+  sessions/Origin/CSRF, bounded bodies/devices/events/messages, token hashing,
+  static asset allowlist/MIME/CSP, actual planned voice/schedules states.
+- src/store.mjs: atomic private persistent state, AES-256-GCM integration secrets,
+  encrypted AI key/model/prompt and Telegram token/chat settings, serialized writes.
+- src/telegram.mjs: fixed official HTTPS endpoint, redirect rejection, timeout,
+  injected fetch transport and secret-free failure results.
+- src/ai.mjs: working stateless OpenAI Responses text module; fixed official URL,
+  store:false, max_output_tokens:1024, 2000 input/4000 output chars, provider JSON
+  bounded to256KiB, auth/quota/unavailable fixed errors, 15s deadline.
+- src/private-files.mjs: private regular single-link owner-currentUID mode0600
+  reads using O_NOFOLLOW; rejects user symlink ancestors. Only trusted macOS
+  /tmp→/private/tmp and /var→/private/var aliases are canonicalized.
+- src/module-example.mjs: explicitly invoked pure summarizeEvent(event) example.
+- tests/server.test.mjs: 13 backend tests with real loopback HTTP and temporary
+  synthetic state. External provider requests always injected, never real.
+
+Evidence:
+- Initial HTTP contract tests RED before server existed; first implemented batch
+  GREEN 4/4. AI feature tests RED missing settings/route then GREEN 6/6.
+- Pending-provider regression RED (device creation blocked), then GREEN after
+  moving all external waits outside exclusive persistence operations.
+- Private-file regression RED (hardlink accepted), then GREEN with nofollow,
+  single-link/owner/mode checks and no modification of synthetic outside target.
+- Final full `node --test`: 21 passed, 0 failed, ~16.9s (8 init +13 backend).
+- Syntax checks for all substantive backend modules and git diff --check passed.
+- Tests include foreign Origin/CSRF, stale/restarted/logout sessions, device
+  revocation, scoped/concurrent/persisted deduplication, Telegram failures retaining
+  events, persisted queue/ack, encrypted secret absence, queue50/device50/event200
+  bounds, device120/min and login10/min rate bounds, AI fixed request contract,
+  provider errors/oversized output, and actual8s/15s ignored-abort deadlines.
+- Slow Telegram test confirms duplicate does not resend and another device inbox
+  plus administrative revocation remain available while delivery waits.
+
+Operational decisions/limits for docs:
+- Node24 built-ins only. One process per data directory. CLI default origin
+  http://127.0.0.1:4391; password file defaults dataDir/admin-password, configurable
+  by KIBI_ADMIN_PASSWORD_FILE. Admin password requires at least12 chars.
+- dataDir0700; encryption.key/state.json0600. Back up entire directory. Missing
+  encryption key with existing state fails closed. User-created insecure/linked
+  private files fail closed rather than repairing another target's permissions.
+- Sessions12h, max128; reset after server restart. Rates:10 login/min per socket
+  IP,240 admin calls/min/session,120 device calls/min/token; buckets capped1000.
+  Reverse-proxy forwarded client headers are deliberately not trusted.
+- Maximum64 pending persistence operations and8 simultaneous provider requests;
+  overload returns503 server_busy. Telegram overload retains event as failed.
+- Deduplication lasts only while the event remains in the global newest200;
+  retrying an evicted event ID creates a new event. Queues reject overflow;
+  they never discard an unacknowledged message to admit another.
+- An authorized provider request already started may finish after key/device
+  revocation. Newly queued device calls recheck revocation inside transaction.
+- Events are persisted locally before notification. A process crash after an
+  actual upstream send but before final delivery persistence can leave local
+  status; no automatic retries, exactly-once upstream delivery is not claimed.
+- No public VPS, physical board, real Telegram or real OpenAI verification.
+  Root owns browser QA, docs integration, publication and deployment claims.
+
+No outstanding confirmed backend defect at handoff.

@@ -1,0 +1,11 @@
+.data/
+data/
+.env
+.env.*
+!.env.example
+node_modules/
+tmp/
+output/
+.superpowers/
+.DS_Store
+*.log

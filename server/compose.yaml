@@ -1,0 +1,32 @@
+name: kibi-server
+services:
+  kibi:
+    build: .
+    image: kibi-server:local
+    user: "${KIBI_UID:-1000}:${KIBI_GID:-1000}"
+    read_only: true
+    init: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    stop_grace_period: 15s
+    pids_limit: 100
+    environment:
+      KIBI_HOST: 0.0.0.0
+      KIBI_PORT: "4391"
+      KIBI_DATA_DIR: /app/.data
+      KIBI_ADMIN_PASSWORD_FILE: /app/.data/admin-password
+      KIBI_PUBLIC_ORIGIN: ${KIBI_PUBLIC_ORIGIN:-http://127.0.0.1:4391}
+    ports:
+      - "127.0.0.1:4391:4391"
+    volumes:
+      - type: bind
+        source: ./.data
+        target: /app/.data
+        bind:
+          create_host_path: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"

@@ -1,0 +1,50 @@
+Kibi Server — independent final source review
+Date: 2026-11-08
+
+Verdict: no confirmed P0/P1/P2 must-fix findings in the reviewed source.
+The scoped first-version specification is met at source level. Publication is
+not blocked by this review; production installation is not certified by it.
+
+Scope reviewed:
+- AGENTS.md, docs/API.md, design specification and implementation reports.
+- src/server.mjs: administrator session/Origin/CSRF handling, device bearer
+  authentication and revocation recheck, scoped event deduplication, queued
+  messages, bounded queues and provider calls outside the persistence queue.
+- src/private-files.mjs, src/store.mjs, scripts/init.mjs: no-follow private
+  reads, ownership/mode checks, token hashing, encrypted integration settings,
+  preserved initialization, atomic replacement and one-process storage scope.
+- src/ai.mjs and src/telegram.mjs: fixed HTTPS destinations, redirect rejection,
+  deadlines, explicit calls and fixed errors without provider error bodies.
+- web/index.html, web/app.js, web/styles.css: API wiring, text-only rendering of
+  untrusted strings, secret fields and token clearing, truthful module states,
+  Russian interface, brand palette/local font, installation instructions.
+  Final AI-first copy/order reread: overview links to module setup, onboarding
+  starts with model/character, and the AI form precedes Telegram with the same
+  IDs and API contract. No new source-level blocker found.
+- Dockerfile, Compose files, Caddyfile, ignore rules, README.md, START_HERE.md,
+  bootstrap-prompt.txt and docs/MODULES.md: persistent storage, UID ownership,
+  local binding, non-root/read-only runtime, public HTTPS configuration,
+  backup/update guidance and consistent repository/branch/subdirectory links.
+
+Compliance: this is an independently deployable text-AI/device server, not just
+a landing page. Model and system instruction are configurable. Telegram and
+device notifications have implemented request paths. Voice, scheduling,
+multi-turn memory and physical firmware integration remain explicitly outside
+the delivered implementation. No fabricated devices or readiness were found.
+
+Verification limits:
+- This review was source/report inspection only; no test suite was rerun.
+  Backend/deployment reports record 21 passing tests and a real local CLI
+  restart/persistence smoke test. Those are reported evidence, not an
+  independent runtime execution by this reviewer.
+- Browser interaction and final responsive/visual checks belong to the root
+  reviewer; no browser session was opened for this independent review.
+- Docker build/run, Compose runtime validation, Caddy redirect/TLS behavior,
+  actual DNS/certificate issuance and installation on a VPS were not verified.
+- Real OpenAI/Telegram availability, billing, credentials, models, physical
+  device firmware and HTTPS compatibility were not exercised.
+- GitHub publication and availability of the linked branch/subdirectory are
+  integration tasks; link strings were compared, not fetched or certified.
+- No .data contents, private Studio projects or infrastructure were accessed.
+
+Actionable must-fix findings: none confirmed.
