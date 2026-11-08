@@ -1,0 +1,20 @@
+{
+  "name": "opusscript",
+  "version": "0.1.1",
+  "libopus": "1.4",
+  "source": "https://github.com/abalabahaha/opusscript/tree/07ae74db7385d6d1be981d929f2f2f2b7e6b8449",
+  "tarball": "https://registry.npmjs.org/opusscript/-/opusscript-0.1.1.tgz",
+  "sha256": "019de769ad4a556f2ca874459f3c2c4b6a626a82b39318e2dbf4a494964bdc7a",
+  "integrity": "sha512-mL0fZZOUnXdZ78woRXp18lApwpp0lF5tozJOD1Wut0dgrA9WuQTgSels/CSmFleaAZrJi/nci5KOVtbuxeWoQA==",
+  "files": {
+    "LICENSE": "4cd1d429bae80d10e538739e412b4300b8490786473e7b60280f9638cec683e3",
+    "index.js": "b539ae317c54820a73399bec2c832136c70c5221ac8c3fa3555421d9b417d50e",
+    "build/opusscript_native_nasm.js": "76de635d9aed402ac266352ecfff3b10acc6c7d1012f2555cf5bdb3e448598b0",
+    "build/opusscript_native_wasm.js": "176802f6e4a7616d3049c5361e2d448f6b2cadd6d9946f1d434e5ab5789d2fe3",
+    "package.json": "c18c4d7d0fae6311568a2f7c4cba5b181d6af801c460093ecc45b3b75f0a117f",
+    "build/COPYING.libopus": "8338ce8d922bb4416ce3dd1e5680173332435e3f0755007ac7801ccd674fe682",
+    "README.md": "5a47beff744299ae48f9ddb59c439582917f118cdcd20a829c268c0f85b233d2",
+    "index.d.ts": "b5deb6cc5108074cbf1ecc8e6178fcb4427415c426ec60ec233e901277f72280",
+    "build/opusscript_native_wasm.wasm": "e24b269dbfde9f357de19f5b4f6458010be356d7122b0bb8bfe439504a6d5c33"
+  }
+}

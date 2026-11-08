@@ -14,7 +14,7 @@ async function fixture(t, options = {}) {
   let cookie;
   let csrf;
   const start = async () => {
-    server = await createKibiServer({ dataDir, adminPassword: password, publicOrigin: origin, ...options });
+    server = await createKibiServer({ dataDir, adminPassword: password, publicOrigin: origin, voiceConfig: { enabled: false }, ...options });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     base = `http://127.0.0.1:${server.address().port}`;
   };
@@ -51,7 +51,10 @@ test('fresh server exposes health, empty truthful modules and private session pr
   assert.match(login.headers.get('set-cookie'), /SameSite=Strict/);
   const overview = (await f.call('/api/overview', { admin: true })).json;
   assert.deepEqual(overview.devices, []); assert.deepEqual(overview.events, []);
-  assert.equal(overview.modules.find(x => x.id === 'voice').status, 'planned');
+  assert.equal(overview.modules.find(x => x.id === 'voice').status, 'disabled');
+  const voice = (await f.call('/api/settings', { admin: true })).json.voice;
+  assert.equal(voice.enabled, false); assert.equal(voice.model, 'gpt-realtime'); assert.equal(voice.tls, false);
+  assert.equal(voice.endpoint, 'wss://localhost:4391/kibi-xiaozhi/v1');
   assert.equal(overview.modules.find(x => x.id === 'schedules').status, 'planned');
   assert.equal((await f.call('/api/devices', { method: 'POST', admin: true, body: { name: 'x' }, headers: { Origin: 'https://evil.invalid' } })).status, 403);
   assert.equal((await f.call('/api/devices', { method: 'POST', admin: true, body: { name: 'x' }, headers: { 'X-CSRF-Token': 'wrong' } })).status, 403);

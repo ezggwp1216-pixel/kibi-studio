@@ -7,3 +7,6 @@
 !scripts/init.mjs
 !web/
 !web/**
+!resources/
+!resources/xiaozhi/
+!resources/xiaozhi/**

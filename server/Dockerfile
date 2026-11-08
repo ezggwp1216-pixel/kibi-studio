@@ -10,7 +10,8 @@ COPY --chown=node:node package.json ./
 COPY --chown=node:node src/ ./src/
 COPY --chown=node:node scripts/init.mjs ./scripts/init.mjs
 COPY --chown=node:node web/ ./web/
+COPY --chown=node:node resources/xiaozhi/ ./resources/xiaozhi/
 USER node
-EXPOSE 4391
+EXPOSE 4391 9444
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["node", "--input-type=module", "-e", "const r=await fetch('http://127.0.0.1:4391/api/health',{signal:AbortSignal.timeout(3000)});const b=await r.json();if(!r.ok||b.ok!==true||b.name!=='kibi-server')process.exit(1)"]
 CMD ["node", "src/server.mjs"]

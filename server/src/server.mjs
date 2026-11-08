@@ -7,6 +7,7 @@ import { openStore } from './store.mjs';
 import { sendTelegram, validTelegramCredentials } from './telegram.mjs';
 import { askAi, DEFAULT_MODEL, validApiKey, validModel } from './ai.mjs';
 import { readPrivateFile } from './private-files.mjs';
+import { startVoiceModule } from './voice.mjs';
 
 const VERSION = '0.1.0';
 const SESSION_TTL = 12 * 60 * 60 * 1000;
@@ -44,13 +45,15 @@ async function bodyOf(req) {
   } catch { throw fail(400, 'invalid_json'); }
 }
 
-export async function createKibiServer({ dataDir, adminPassword, publicOrigin, fetchImpl = fetch, webRoot = fileURLToPath(new URL('../web/', import.meta.url)) } = {}) {
+export async function createKibiServer({ dataDir, adminPassword, publicOrigin, fetchImpl = fetch, webRoot = fileURLToPath(new URL('../web/', import.meta.url)), voiceConfig, cookiePath = process.env.KIBI_COOKIE_PATH || '/' } = {}) {
   let origin;
   try { origin = new URL(publicOrigin); } catch { throw new Error('invalid_public_origin'); }
   if (!['http:', 'https:'].includes(origin.protocol) || origin.origin !== publicOrigin) throw new Error('invalid_public_origin');
   if (typeof dataDir !== 'string' || !text(adminPassword, 12, 1024)) throw new Error('invalid_configuration');
+  if (!/^\/(?:[A-Za-z0-9_-]+\/)*$/.test(cookiePath)) throw new Error('invalid_cookie_path');
   const store = await openStore(dataDir);
   const state = store.state;
+  const voice = await startVoiceModule({ store, publicOrigin, ...(voiceConfig ? { config: voiceConfig } : {}) });
   const salt = randomBytes(16);
   const passwordHash = scryptSync(adminPassword, salt, 32);
   adminPassword = undefined;
@@ -126,7 +129,7 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
       return { ok: true, text: result.text };
     });
   };
-  const cookie = (value, maxAge) => `kibi_session=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${origin.protocol === 'https:' ? '; Secure' : ''}`;
+  const cookie = (value, maxAge) => `kibi_session=${value}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${origin.protocol === 'https:' ? '; Secure' : ''}`;
   const addEvent = async (input, deviceId = null, clientEventId) => {
     const event = { id: randomUUID(), ...input, deviceId, createdAt: new Date().toISOString(), delivery: 'local', ...(clientEventId ? { clientEventId } : {}) };
     state.events.unshift(event); state.events.length = Math.min(state.events.length, 200);
@@ -179,10 +182,10 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
             { id: 'ai', name: 'Текстовый ИИ', status: aiStatus().configured ? 'configured' : 'not_configured', configured: aiStatus().configured },
             { id: 'notifications', name: 'Уведомления', status: 'ready' },
             { id: 'telegram', name: 'Telegram', status: telegram.configured ? 'configured' : 'not_configured', configured: telegram.configured },
-            { id: 'voice', name: 'Голосовой ИИ', status: 'planned' }, { id: 'schedules', name: 'Расписания', status: 'planned' },
+            { id: 'voice', name: 'Голосовой ИИ', ...voice.status() }, { id: 'schedules', name: 'Расписания', status: 'planned' },
           ] });
       }
-      if (method === 'GET' && path === '/api/settings') { admin(req); return json(res, 200, { telegram: telegramStatus(), ai: aiStatus() }); }
+      if (method === 'GET' && path === '/api/settings') { admin(req); return json(res, 200, { telegram: telegramStatus(), ai: aiStatus(), voice: voice.status() }); }
       if (path.startsWith('/api/')) {
         // Authentication and body bounds occur before waiting for the persistence
         // queue. This prevents queued slow bodies from blocking other clients.
@@ -226,9 +229,9 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
               const apiKey = body.apiKey || previous?.apiKey;
               if (!validApiKey(apiKey)) throw fail(400, 'ai_invalid_key');
               state.ai = store.seal({ apiKey, model: body.model, systemPrompt: body.systemPrompt, enabled: body.enabled });
-              await store.save(); return json(res, 200, { ok: true, ai: aiStatus() });
+              await store.save(); voice.reconcile(); return json(res, 200, { ok: true, ai: aiStatus(), voice: voice.status() });
             }
-            if (method === 'DELETE' && path === '/api/settings/ai') { state.ai = null; await store.save(); return json(res, 200, { ok: true }); }
+            if (method === 'DELETE' && path === '/api/settings/ai') { state.ai = null; await store.save(); voice.reconcile(); return json(res, 200, { ok: true }); }
             if (method === 'POST' && path === '/api/modules/ai/test') {
               const send = prepareChat(body);
               return async () => json(res, 200, await send());
@@ -245,7 +248,7 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
               const index = state.devices.findIndex(x => x.id === match[1]);
               if (index < 0) throw fail(404, 'device_not_found');
               const device = state.devices[index];
-              if (method === 'DELETE' && !match[2]) { state.devices.splice(index, 1); await store.save(); return json(res, 200, { ok: true }); }
+              if (method === 'DELETE' && !match[2]) { state.devices.splice(index, 1); await store.save(); voice.reconcile(); return json(res, 200, { ok: true }); }
               if (method === 'POST' && match[2]) {
                 const input = content(body);
                 if (device.messages.length >= 50) throw fail(409, 'message_limit');
@@ -294,6 +297,12 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
   server.headersTimeout = 10000;
   server.maxHeadersCount = 50;
   server.maxConnections = 256;
+  const closeHttp = server.close.bind(server);
+  server.close = callback => {
+    const closingVoice = voice.close();
+    closeHttp(error => { closingVoice.then(() => callback?.(error), () => callback?.(error || new Error('voice_close_failed'))); });
+    return server;
+  };
   return server;
 }
 
@@ -304,7 +313,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     const port = Number(process.env.KIBI_PORT || 4391);
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('invalid_port');
     const server = await createKibiServer({ dataDir, adminPassword, publicOrigin: process.env.KIBI_PUBLIC_ORIGIN || 'http://127.0.0.1:4391' });
-    server.on('error', () => { console.error('Kibi Server: не удалось запустить сервер.'); process.exitCode = 1; });
+    server.on('error', () => { console.error('Kibi Server: не удалось запустить сервер.'); server.close(); process.exitCode = 1; });
     server.listen(port, process.env.KIBI_HOST || '127.0.0.1', () => console.log(`Kibi Server ${VERSION}: сервер запущен.`));
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => server.close());
   } catch { console.error('Kibi Server: проверьте настройки запуска и приватные файлы.'); process.exitCode = 1; }
