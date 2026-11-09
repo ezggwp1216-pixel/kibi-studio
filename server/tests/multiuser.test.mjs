@@ -13,7 +13,8 @@ async function fixture(t){
  await start();t.after(async()=>{await stop();await rm(dir,{recursive:true,force:true});});
  const call=async(path,{method='GET',body,session,token,headers={}}={})=>{
   const response=await fetch(base+path,{method,headers:{...(body!==undefined?{'Content-Type':'application/json'}:{}),...(session?{Origin:origin,Cookie:session.cookie,'X-CSRF-Token':session.csrf}:{}),...(token?{Authorization:`Bearer ${token}`} : {}),...headers},...(body!==undefined?{body:JSON.stringify(body)}:{})});
-  return {status:response.status,headers:response.headers,json:await response.json()};
+  const text=await response.text();let json;try{json=JSON.parse(text);}catch{}
+  return {status:response.status,headers:response.headers,json,text};
  };
  const auth=async(email,path='/api/register')=>{
   const r=await call(path,{method:'POST',body:{...(email?{email}:{}),password},headers:{Origin:origin}});assert.ok([200,201].includes(r.status),JSON.stringify(r.json));
@@ -74,6 +75,9 @@ test('auth protections, cookie isolation, logout and SDK validation are real',as
  assert.equal((await f.call('/api/sdk/validate',{method:'POST',body:{package:{}}})).status,401);
  const validation=await f.call('/api/sdk/validate',{method:'POST',session:a,body:{package:{}}});assert.equal(validation.status,200);assert.equal(validation.json.valid,false);assert.equal(validation.json.runtimeSupported,false);
  assert.equal((await f.call('/api/sdk')).json.execution,false);
+ for(const path of ['/docs/API.md','/docs/MODULES.md','/docs/VOICE.md','/docs/SDK.md','/docs/LOCAL_STUDIO.md','/sdk/index.mjs','/sdk/client.mjs','/sdk/manifest.mjs','/sdk/validate.mjs','/sdk/kibiplugin.schema.json','/examples/server-plugin/local-notification.kibiplugin','/examples/server-plugin/future-handler.kibiplugin']){
+  const asset=await f.call(path);assert.equal(asset.status,200,path);assert.ok(asset.text.length>10,path);
+ }
  await f.call('/api/logout',{method:'POST',session:a});assert.deepEqual((await f.call('/api/session',{session:a})).json,{authenticated:false});
  assert.equal((await f.call('/api/devices',{method:'POST',session:a,body:{name:'old session'}})).status,401);
 });

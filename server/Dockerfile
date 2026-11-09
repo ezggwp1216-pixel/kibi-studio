@@ -11,7 +11,7 @@ COPY --chown=node:node src/ ./src/
 COPY --chown=node:node scripts/init.mjs ./scripts/init.mjs
 COPY --chown=node:node web/ ./web/
 COPY --chown=node:node sdk/ ./sdk/
-COPY --chown=node:node docs/SDK.md docs/LOCAL_STUDIO.md docs/API.md docs/MODULES.md ./docs/
+COPY --chown=node:node docs/SDK.md docs/LOCAL_STUDIO.md docs/API.md docs/MODULES.md docs/VOICE.md ./docs/
 COPY --chown=node:node examples/server-plugin/ ./examples/server-plugin/
 COPY --chown=node:node resources/xiaozhi/ ./resources/xiaozhi/
 USER node
