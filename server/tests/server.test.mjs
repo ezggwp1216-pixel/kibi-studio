@@ -94,7 +94,7 @@ test('Telegram settings are encrypted, explicit test uses fixed host, failures r
   const f = await fixture(t, { fetchImpl: async (url, options) => {
     requests.push({ url, options });
     if (fail) throw new Error(`oops ${url}`);
-    return { ok: true, json: async () => ({ ok: true }) };
+    return new Response('{"ok":true}');
   } });
   await f.login();
   assert.deepEqual((await f.call('/api/settings', { admin: true })).json.telegram, { configured: false, enabled: false });
@@ -279,7 +279,7 @@ test('pending Telegram delivery preserves deduplication while inbox and revoke r
   const beginning = new Promise(resolve => { started = resolve; });
   const pending = new Promise(resolve => { release = resolve; });
   let calls = 0;
-  const f = await fixture(t, { fetchImpl: async () => { calls++; started(); await pending; return { ok: true, json: async () => ({ ok: true }) }; } });
+  const f = await fixture(t, { fetchImpl: async () => { calls++; started(); await pending; return new Response('{"ok":true}'); } });
   await f.login();
   await f.call('/api/settings/telegram', { method: 'POST', admin: true, body: { token: '123456:private_secret_telegram_token', chatId: '-123456789', enabled: true } });
   const a = (await f.call('/api/devices', { method: 'POST', admin: true, body: { name: 'sending' } })).json;

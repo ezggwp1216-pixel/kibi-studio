@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "release": "2026-11-09-r1",
+  "profiles": [
+    {
+      "id": "installed-reviewed",
+      "files": [
+        {
+          "path": "prompts/agent-system.md",
+          "before": "743aa5f9fdd1d1f7c583f172cc51bb06d1294ff0bdf5507130ffdbbbb81c18fe",
+          "after": "8c5640f52def9974d5bebee28b6eb380350d551d5b69e7d81cbd3e8f1fc7b936"
+        },
+        {
+          "path": "resources/board.json",
+          "before": "74c1dcd37618e6d9c59946989c3796d8c67fb7a63f830b6d626012f48245c5c6",
+          "after": "74c1dcd37618e6d9c59946989c3796d8c67fb7a63f830b6d626012f48245c5c6"
+        },
+        {
+          "path": "resources/device-contract.json",
+          "before": null,
+          "after": "12771098af04fd141d74ba2ec8b2643a0ca3f56a206a84a0d45cae2739ddf4b7"
+        },
+        {
+          "path": "scripts/check-public-sdk.mjs",
+          "before": null,
+          "after": "2f3506640d0747e229c16df7dba258ddf0e5968aad8f7db88b8cd816b050f5b5"
+        },
+        {
+          "path": "src/device-migrations.mjs",
+          "before": "eafcd980c4c73c5f0ad5e8053828a07f45a4c020070dc9cc824082ccd429eb0d",
+          "after": "eafcd980c4c73c5f0ad5e8053828a07f45a4c020070dc9cc824082ccd429eb0d"
+        },
+        {
+          "path": "templates/kibi-base/AGENTS.md",
+          "before": "0bd0702887143527e5747ef114946ebb46a2f24dfc869289d56449567dfb84ac",
+          "after": "60652a41591579838081768bd6497b551a3976a234bcdddca0035ca81fca89bb"
+        },
+        {
+          "path": "templates/kibi-base/board.json",
+          "before": "74c1dcd37618e6d9c59946989c3796d8c67fb7a63f830b6d626012f48245c5c6",
+          "after": "74c1dcd37618e6d9c59946989c3796d8c67fb7a63f830b6d626012f48245c5c6"
+        },
+        {
+          "path": "templates/kibi-base/firmware/README.md",
+          "before": "b8baa27a831a9e48f2841afdfc7239f0fbb07d5dbebad95678ee004c97372037",
+          "after": "d39141871582ec48c9fca6ea6069b430522eabfe98bd0c9882ea05a167227ba3"
+        },
+        {
+          "path": "templates/kibi-base/firmware/audio_codec_power.h",
+          "before": "1923172d1aff4be60a68bd148d4256c70fabf9d4716e0e8dbf486b9529bb49d4",
+          "after": "1923172d1aff4be60a68bd148d4256c70fabf9d4716e0e8dbf486b9529bb49d4"
+        },
+        {
+          "path": "templates/kibi-base/manifest.json",
+          "before": "83a8bbfcc00256410452e7b5e8dc835a6485e2156b0daf6f27a83ee6d3615089",
+          "after": "dd41dd3a943cbb1885f8448e589f8395cac31ec0fa3518b9796f5b2648b48df3"
+        }
+      ]
+    },
+    {
+      "id": "installed-before-prepare",
+      "files": [
+        {
+          "path": "prompts/agent-system.md",
+          "before": "743aa5f9fdd1d1f7c583f172cc51bb06d1294ff0bdf5507130ffdbbbb81c18fe",
+          "after": "8c5640f52def9974d5bebee28b6eb380350d551d5b69e7d81cbd3e8f1fc7b936"
+        },
+        {
+          "path": "resources/board.json",
+          "before": "308afcf000ca0f90d0b198f201e7b8e5c4509d5a96ac115ecd3c3c3d1228befe",
+          "after": "74c1dcd37618e6d9c59946989c3796d8c67fb7a63f830b6d626012f48245c5c6"
+        },
+        {
+          "path": "resources/device-contract.json",
+          "before": null,
+          "after": "12771098af04fd141d74ba2ec8b2643a0ca3f56a206a84a0d45cae2739ddf4b7"
+        },
+        {
+          "path": "scripts/check-public-sdk.mjs",
+          "before": null,
+          "after": "2f3506640d0747e229c16df7dba258ddf0e5968aad8f7db88b8cd816b050f5b5"
+        },
+        {
+          "path": "src/device-migrations.mjs",
+          "before": "03b623457a90bbcd7825c138b0cf0388f5d14eb748e600b7022ccf43afef660c",
+          "after": "eafcd980c4c73c5f0ad5e8053828a07f45a4c020070dc9cc824082ccd429eb0d"
+        },
+        {
+          "path": "templates/kibi-base/AGENTS.md",
+          "before": "0bd0702887143527e5747ef114946ebb46a2f24dfc869289d56449567dfb84ac",
+          "after": "60652a41591579838081768bd6497b551a3976a234bcdddca0035ca81fca89bb"
+        },
+        {
+          "path": "templates/kibi-base/board.json",
+          "before": "308afcf000ca0f90d0b198f201e7b8e5c4509d5a96ac115ecd3c3c3d1228befe",
+          "after": "74c1dcd37618e6d9c59946989c3796d8c67fb7a63f830b6d626012f48245c5c6"
+        },
+        {
+          "path": "templates/kibi-base/firmware/README.md",
+          "before": "02b96fd663e678f9d67495726c6a686201be5e7487091bebb7034058bfa0b96b",
+          "after": "d39141871582ec48c9fca6ea6069b430522eabfe98bd0c9882ea05a167227ba3"
+        },
+        {
+          "path": "templates/kibi-base/firmware/audio_codec_power.h",
+          "before": "a706e3f8832f9fa42cc02b357a8c3b3000bd2ae7b3e9f063c04c595051df3de8",
+          "after": "1923172d1aff4be60a68bd148d4256c70fabf9d4716e0e8dbf486b9529bb49d4"
+        },
+        {
+          "path": "templates/kibi-base/manifest.json",
+          "before": "ba8100e2a1b05684624f43853869219646cc77c62755db828e432d578d056a33",
+          "after": "dd41dd3a943cbb1885f8448e589f8395cac31ec0fa3518b9796f5b2648b48df3"
+        }
+      ]
+    },
+    {
+      "id": "source-connectivity",
+      "files": [
+        {
+          "path": "prompts/agent-system.md",
+          "before": "1517f7d82c27c2f2685f004e6c5fc32682d7cfa4e35ac080cfcc55c44ff28646",
+          "after": "c3daabbc15fa7d9fc84f8653d818396e32bf997e0216a514435710df61b7b9d0"
+        },
+        {
+          "path": "resources/board.json",
+          "before": "29420ccac331856b2a9328593cd997f30b61c3cb566bb0db2a241a90ae85242e",
+          "after": "753d77984022c04a449097ebf08ab3e48f8c8e30e857583a60d09609d995744f"
+        },
+        {
+          "path": "resources/device-contract.json",
+          "before": null,
+          "after": "12771098af04fd141d74ba2ec8b2643a0ca3f56a206a84a0d45cae2739ddf4b7"
+        },
+        {
+          "path": "scripts/check-public-sdk.mjs",
+          "before": null,
+          "after": "2f3506640d0747e229c16df7dba258ddf0e5968aad8f7db88b8cd816b050f5b5"
+        },
+        {
+          "path": "scripts/package.mjs",
+          "before": "359db355a78546424433be2364c696f33af390c20a01114638599987a8bd7248",
+          "after": "35cc6e25160c668382644068255688faadd19fcfe9690046d938273e083e2b0f"
+        },
+        {
+          "path": "src/device-migrations.mjs",
+          "before": "03b623457a90bbcd7825c138b0cf0388f5d14eb748e600b7022ccf43afef660c",
+          "after": "eafcd980c4c73c5f0ad5e8053828a07f45a4c020070dc9cc824082ccd429eb0d"
+        },
+        {
+          "path": "src/module-migrations.mjs",
+          "before": "487b205501a49cb25761c176d2101eac52d48921484b4f431d0f87018975e658",
+          "after": "e38b3beb42aff3a837407d28e4e3c2fc618cf92558e52dc92034d5250fd92ca1"
+        },
+        {
+          "path": "templates/kibi-base/AGENTS.md",
+          "before": "ae0b9eccb1c3201aded9686ee3635447ee954eaa772f873a10c7c7aeafe5f866",
+          "after": "8fa1d6d46ae068b3827b575701845777cc3b00e5217b4fcdb702272ffe516823"
+        },
+        {
+          "path": "templates/kibi-base/board.json",
+          "before": "29420ccac331856b2a9328593cd997f30b61c3cb566bb0db2a241a90ae85242e",
+          "after": "753d77984022c04a449097ebf08ab3e48f8c8e30e857583a60d09609d995744f"
+        },
+        {
+          "path": "templates/kibi-base/firmware/README.md",
+          "before": "02b96fd663e678f9d67495726c6a686201be5e7487091bebb7034058bfa0b96b",
+          "after": "d39141871582ec48c9fca6ea6069b430522eabfe98bd0c9882ea05a167227ba3"
+        },
+        {
+          "path": "templates/kibi-base/firmware/audio_codec_power.h",
+          "before": "a706e3f8832f9fa42cc02b357a8c3b3000bd2ae7b3e9f063c04c595051df3de8",
+          "after": "1923172d1aff4be60a68bd148d4256c70fabf9d4716e0e8dbf486b9529bb49d4"
+        },
+        {
+          "path": "templates/kibi-base/firmware/wifi.h",
+          "before": "2c6af68d02eaac288a522bad4b70f45cd702d81da6e1e240948a7683706c8d4a",
+          "after": "1a7194458882062a18d7b1250bccb99b6712a294c07b9c121e01252c86497d4d"
+        },
+        {
+          "path": "templates/kibi-base/manifest.json",
+          "before": "5ded5a4348148bc5f07e305ca21805250cc884d4720820454a7177ef9c5d05d2",
+          "after": "44878760c2f9371b7beabeb88551b473b1164a1c8ff9b0ab33e3a33dd2aadaa5"
+        }
+      ]
+    }
+  ]
+}

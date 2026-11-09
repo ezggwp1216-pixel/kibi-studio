@@ -117,7 +117,10 @@ pairing support on the website. See [local Studio instructions](LOCAL_STUDIO.md)
 
 ## SDK 1.0
 
-`GET /api/sdk` returns `{version:"1.0",validation:true,execution:false,links}`.
+`GET /api/sdk` returns `{version:"1.0",deviceContract:"1.0",supportRelease:"2026-11-09-r1",validation:true,execution:false,links}`.
+Public links include hardware/service instructions, the device contract and a
+SHA-256-pinned SDK support kit. Its updater touches only known public SDK paths;
+it neither reads private projects/configuration nor flashes a device.
 `POST /api/sdk/validate` requires session/Origin/CSRF and
 `{package:<JSON object or JSON text>}` up to a 136 KiB HTTP wrapper; the package
 itself is limited to 128 KiB. Response is

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "release": "2026-11-09-r1",
+  "archive": {
+    "path": "sdk/device/kibi-device-support-20261109.tar.gz",
+    "bytes": 173975,
+    "sha256": "49e7a53f64df65bdb62c70d32888b0dca68ffc3445924201cfbb884e39cbe1d2"
+  },
+  "manifestSha256": "2aacf7783268472d1a887ad32dca1cbe9c4c04abc5034488fd18eac136578daf",
+  "requiresNode": ">=24",
+  "profiles": [
+    "installed-reviewed",
+    "installed-before-prepare",
+    "source-connectivity"
+  ],
+  "privateFilesIncluded": false
+}

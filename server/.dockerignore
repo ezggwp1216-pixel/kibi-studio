@@ -15,6 +15,9 @@
 !docs/API.md
 !docs/MODULES.md
 !docs/VOICE.md
+!docs/HARDWARE.md
+!docs/SERVICES.md
+!docs/SDK_UPDATE.md
 !examples/
 !examples/server-plugin/
 !examples/server-plugin/**

@@ -1,0 +1,249 @@
+{
+  "id": "kibi-ds02-s3-16m",
+  "name": "Kibi DS02 ESP32-S3 16 MiB",
+  "chip": "ESP32-S3",
+  "chipId": 9,
+  "flashSize": 16777216,
+  "flashMode": "dio",
+  "flashFrequency": "40m",
+  "psram": "opi",
+  "psramFrequency": "80m",
+  "display": {
+    "width": 240,
+    "height": 296,
+    "format": "RGB565",
+    "cornerRadius": 62
+  },
+  "buttons": {
+    "physicalOrderRight": [
+      "plus",
+      "power",
+      "minus"
+    ],
+    "plusGPIO": 40,
+    "minusGPIO": 39,
+    "powerGPIO": null
+  },
+  "coreVersion": "3.3.12",
+  "sdkVersion": "5.5.5",
+  "toolchain": "esp-x32/2601",
+  "appMaximumSize": 2097152,
+  "partitions": "partitions.csv",
+  "appOffsets": [
+    65536,
+    2162688
+  ],
+  "requiredSDK": [
+    "CONFIG_PM_ENABLE",
+    "CONFIG_FREERTOS_USE_TICKLESS_IDLE",
+    "CONFIG_I2S_ISR_IRAM_SAFE",
+    "CONFIG_SPIRAM_MODE_OCT",
+    "CONFIG_SPIRAM_SPEED_80M",
+    "CONFIG_ESPTOOLPY_FLASHFREQ_40M",
+    "CONFIG_ESPTOOLPY_FLASHSIZE_16MB",
+    "CONFIG_MBEDTLS_CERTIFICATE_BUNDLE",
+    "CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL"
+  ],
+  "typography": "Source Sans 3 prepared AA4 glyphs",
+  "protectedDrivers": true,
+  "capabilities": {
+    "touch": {
+      "controller": "CST810",
+      "events": [
+        "Down",
+        "Move",
+        "Up",
+        "Cancel"
+      ],
+      "calibration": "preserve existing NVS calibration",
+      "preview": "same portable application gesture reducer; no I2C emulation"
+    },
+    "wifi": {
+      "band": "2.4 GHz",
+      "privateConfiguration": true,
+      "preview": "Native preview does not emulate Wi-Fi; online/loading/stale are scenario inputs, not a radio check.",
+      "initialization": "Protected beginStateInfo samples ADC2 then calls DeviceWifi::beginAfterPlatformReady once. App Feature::begin runs earlier; applications must not call boot hooks or reconfigure the radio.",
+      "retry": "DeviceWifi snapshot/requestRetry and target-only requestTargetScan/scanSnapshot/cancelTargetScan; queued Accepted is not completion. SDK AutoReconnect remains enabled; only ipReady permits Internet work.",
+      "driver": {
+        "header": "wifi.h",
+        "namespace": "Tamagotchi::DeviceWifi",
+        "arduinoOnly": true,
+        "methods": [
+          "snapshot()",
+          "tick(uint32_t now)",
+          "requestRetry(uint32_t now)",
+          "requestTargetScan(uint32_t now)",
+          "scanSnapshot()",
+          "cancelTargetScan()"
+        ],
+        "platformOnly": [
+          "beginAfterPlatformReady()"
+        ],
+        "previewEmulated": false
+      }
+    },
+    "time": {
+      "synchronization": "NTP in firmware",
+      "preview": "Public preview time is not verification of hardware NTP synchronization."
+    },
+    "battery": {
+      "baseSupport": true,
+      "chargingStatus": true,
+      "sleepWake": true,
+      "previewEmulated": false
+    },
+    "microphone": {
+      "baseSupport": true,
+      "sampleRateHz": 16000,
+      "requiresApplicationIntegration": true,
+      "previewEmulated": false
+    },
+    "audioOutput": {
+      "baseSupport": true,
+      "requiresVariant": "speaker",
+      "hardwareVerified": false,
+      "status": "OSTB DS-02 source mapping verified; playback on the selected physical board still requires a hardware check",
+      "previewEmulated": false,
+      "hardware": {
+        "mapping": "OSTB XIAOZHI V1.2 / DS-02",
+        "codec": "ES8311",
+        "codecI2cAddress": 24,
+        "microphoneCodec": "ES7210",
+        "microphoneI2cAddress": 64,
+        "sdaGPIO": 12,
+        "sclGPIO": 11,
+        "mclkGPIO": 5,
+        "bclkGPIO": 15,
+        "wsGPIO": 16,
+        "doutGPIO": 6,
+        "dinGPIO": 7,
+        "amplifierEnableGPIO": 4,
+        "amplifierActiveHigh": true,
+        "sampleRateHz": 16000,
+        "sampleFormat": "PCM16 signed mono, duplicated to stereo I2S",
+        "mclkMultiple": 256,
+        "evidence": [
+          "https://github.com/vinayskanse/mel/blob/65d9455bc5d0cd5cbb89c47f7d6bcff7afe83dea/flybuddy/board_config.h",
+          "https://github.com/vinayskanse/mel/blob/65d9455bc5d0cd5cbb89c47f7d6bcff7afe83dea/flybuddy/audio.cpp",
+          "https://github.com/ALTIO-AI-PRIVATE-LIMITED/cheeko-gotchi/blob/d6bf1f81de4441044829f704d081c29f10f6ff16/firmware/hardware_test/main/cheeko_self_test.c"
+        ]
+      },
+      "driver": {
+        "header": "audio_codec_power.h",
+        "namespace": "Tamagotchi::DeviceAudio",
+        "session": "Session",
+        "methods": [
+          "bool begin()",
+          "bool end()",
+          "bool setVolume(uint8_t percent)",
+          "bool preparePlayback()",
+          "bool stopPlayback()",
+          "bool ready() const",
+          "bool playing() const",
+          "Error lastError() const",
+          "Status readMicMono(int16_t* out, size_t capacity, size_t& samples, uint32_t timeoutMs=20)",
+          "Status writeSpeakerMono(const int16_t* in, size_t count, size_t& samples, uint32_t timeoutMs=20)"
+        ],
+        "status": [
+          "Ok",
+          "TimedOut",
+          "Error",
+          "Unsupported",
+          "Busy"
+        ],
+        "errors": [
+          "None",
+          "Unsupported",
+          "Busy",
+          "Driver",
+          "Codec",
+          "InvalidArgument",
+          "TimedOut"
+        ],
+        "maxSamplesPerCall": 256,
+        "maxTimeoutMs": 20,
+        "defaultVolumePercent": 20,
+        "lifecycle": "Use one worker to own one Session; begin after stock display initialization; interleave bounded reads and writes. stopPlayback on end of utterance, cancellation and errors; end releases the session. Do not directly reconfigure I2S or I2C and do not mix with a separate microphone owner. Optional preparePlayback() primes the amplifier without writing PCM, waiting or changing playing(); one owning worker must keep servicing capture/network during any caller guard. Mute, stop, end or TX failure invalidate preparation. Preparation does not prove analog readiness or heard audio.",
+        "disabledVariant": "Absent KIBI_DEVICE_HAS_SPEAKER defaults to disabled; no speaker GPIO or amplifier access. Ask user to choose Киби с динамиком in Settings. The model cannot change the protected profile."
+      }
+    },
+    "storage": {
+      "baseSupport": [
+        "NVS Preferences",
+        "filesystem"
+      ],
+      "requiresApplicationIntegration": true,
+      "previewEmulated": false
+    },
+    "animation": {
+      "baseSupport": "AGF1/GIF resources in base",
+      "requiresApplicationIntegration": true,
+      "previewEmulated": false
+    },
+    "currentApplication": {
+      "id": "kibi-base",
+      "screens": [
+        "home",
+        "modules",
+        "settings"
+      ],
+      "controls": {
+        "plus": "next screen",
+        "minus": "previous screen",
+        "tap": "native hit targets",
+        "swipeLeft": "next screen",
+        "swipeRight": "previous screen"
+      },
+      "states": [
+        "ready",
+        "loading",
+        "offline",
+        "stale"
+      ],
+      "purpose": "neutral development scaffold; module integrations are implemented per project, not simulated as completed"
+    },
+    "httpsJson": {
+      "header": "http_json.h",
+      "namespace": "Tamagotchi::Https",
+      "arduinoOnly": true,
+      "methods": [
+        "requestJson",
+        "bearerAuth",
+        "apiKeyAuth",
+        "anthropicAuth"
+      ],
+      "maximumRequestBytes": 262144,
+      "maximumResponseBytes": 16384,
+      "defaultMaximumMs": 20000,
+      "followsRedirects": false,
+      "automaticRetries": false,
+      "providerProtocolImplemented": false,
+      "previewEmulated": false
+    },
+    "bluetooth": {
+      "hardware": "BLE only",
+      "available": false,
+      "status": "blocked-sdk",
+      "reason": "CONFIG_BT_ENABLED is disabled; linked host headers/libraries absent",
+      "unsupported": [
+        "Classic",
+        "BluetoothSerial",
+        "SPP",
+        "A2DP"
+      ],
+      "previewEmulated": false
+    }
+  },
+  "deviceVariants": [
+    {
+      "id": "basic",
+      "name": "Киби без динамика",
+      "speaker": false
+    },
+    {
+      "id": "speaker",
+      "name": "Киби с динамиком",
+      "speaker": true
+    }
+  ]
+}

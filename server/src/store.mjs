@@ -1,7 +1,28 @@
-import { mkdir, writeFile, rename, chmod, lstat } from 'node:fs/promises';
+import { mkdir, writeFile, rename, chmod, lstat, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
 import { unlinkedPath, readPrivateFile, isOwned } from './private-files.mjs';
+
+// Keep the committed objects themselves: delivery operations can retain an event
+// while another request fails. Replacing the graph with a clone would detach it.
+function snapshotGraph(root) {
+  const objects = new Map();
+  const visit = value => {
+    if (!value || typeof value !== 'object' || objects.has(value)) return;
+    const properties = Object.getOwnPropertyDescriptors(value);
+    objects.set(value, properties);
+    for (const property of Object.values(properties)) visit(property.value);
+  };
+  visit(root);
+  return objects;
+}
+
+function restoreGraph(snapshot) {
+  for (const [object, properties] of snapshot) {
+    for (const key of Reflect.ownKeys(object)) if (!Object.hasOwn(properties, key)) delete object[key];
+    Object.defineProperties(object, properties);
+  }
+}
 
 // One server process per data directory. All API state changes use exclusive().
 export async function openStore(dataDir) {
@@ -42,6 +63,7 @@ export async function openStore(dataDir) {
   if (state.telegram) unseal(state.telegram); // Fail closed on corrupt/incompatible secrets.
   if (state.ai) unseal(state.ai);
   if (state.xiaozhi) unseal(state.xiaozhi);
+  let committed = snapshotGraph(state);
   let queue = Promise.resolve();
   let pending = 0;
   return {
@@ -52,8 +74,21 @@ export async function openStore(dataDir) {
     xiaozhi: () => state.xiaozhi ? unseal(state.xiaozhi) : null,
     async save() {
       const tempPath = join(dataDir, `.state-${randomBytes(8).toString('hex')}.tmp`);
-      await writeFile(tempPath, JSON.stringify(state), { flag: 'wx', mode: 0o600 });
-      await rename(tempPath, statePath);
+      let saved = false;
+      try {
+        // Capture before I/O, matching the serialized data even if a device's
+        // lastSeenAt changes while the filesystem operation is pending.
+        const snapshot = snapshotGraph(state);
+        await writeFile(tempPath, JSON.stringify(state), { flag: 'wx', mode: 0o600 });
+        await rename(tempPath, statePath);
+        saved = true;
+        committed = snapshot;
+      } catch (error) {
+        restoreGraph(committed);
+        throw error;
+      } finally {
+        if (!saved) await rm(tempPath, { force: true }).catch(() => {});
+      }
     },
     exclusive(fn) {
       if (pending >= 64) return Promise.reject(Object.assign(new Error('server_busy'), { status: 503, code: 'server_busy' }));

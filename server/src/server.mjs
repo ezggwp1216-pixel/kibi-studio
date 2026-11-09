@@ -118,7 +118,7 @@ async function createTenantServer({ dataDir, adminPassword, publicOrigin, fetchI
     const token = secret();
     const device = { id: randomUUID(), name: name.trim(), createdAt: new Date().toISOString(), lastSeenAt: null, tokenHash: sha(token), messages: [] };
     state.devices.push(device);
-    try { await store.save(); } catch (error) { state.devices.splice(state.devices.indexOf(device), 1); throw error; }
+    await store.save(); // The store rolls back to its last committed state on failure.
     onDevicesChanged(state.devices.map(d=>d.tokenHash));
     return {device:viewDevice(device),token};
   });

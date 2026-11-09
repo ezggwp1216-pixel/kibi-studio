@@ -2,7 +2,10 @@ const MAX_RESPONSE_BYTES = 512 * 1024;
 const encoder = new TextEncoder();
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value, max, min = 1) => typeof value === 'string' && value.length >= min && value.length <= max && (min === 0 || value.trim().length > 0) && !/[\u0000-\u001f\u007f]/.test(value);
-const messageText = value => typeof value === 'string' && value.length <= 2000 && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value);
+const humanText = (value,max) => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
+const messageText = value => typeof value === 'string' && value.length <= 2000;
+// API titles are ordinary bounded text, including line breaks in older queues.
+const title = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 120;
 const secret = value => typeof value === 'string' && /^[A-Za-z0-9._~+/-]{1,510}={0,2}$/.test(value);
 const iso = value => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value) && Number.isFinite(Date.parse(value));
 const messages = {
@@ -42,7 +45,11 @@ function normalizeBase(value, allowLocalhostHttp) {
   return url.href;
 }
 
-async function readJson(response) {
+function cancelBody(response) {
+  try { void response?.body?.cancel?.().catch(() => {}); } catch {}
+}
+
+async function readJson(response, signal) {
   if (response.headers?.get) {
     const length = response.headers.get('content-length');
     if (length && (!/^\d+$/.test(length) || Number(length) > MAX_RESPONSE_BYTES)) fail('invalid_response');
@@ -50,17 +57,20 @@ async function readJson(response) {
   let raw;
   if (response.body?.getReader) {
     const reader = response.body.getReader();
+    const cancel = () => { void reader.cancel().catch(() => {}); };
+    signal.addEventListener('abort', cancel, { once: true });
     const chunks = [];
     let length = 0;
     try {
+      if (signal.aborted) fail('timeout');
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         length += value.byteLength;
-        if (length > MAX_RESPONSE_BYTES) { void reader.cancel().catch(() => {}); fail('invalid_response'); }
+        if (length > MAX_RESPONSE_BYTES || chunks.length >= 8192) { void reader.cancel().catch(() => {}); fail('invalid_response'); }
         chunks.push(value);
       }
-    } finally { reader.releaseLock(); }
+    } finally { signal.removeEventListener('abort', cancel); cancel(); reader.releaseLock(); }
     const bytes = new Uint8Array(length);
     let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
@@ -73,7 +83,7 @@ async function readJson(response) {
 }
 
 function safeDevice(value) {
-  if (!record(value) || !text(value.id, 256) || !text(value.name, 64)) fail('invalid_response');
+  if (!record(value) || !text(value.id, 256) || !humanText(value.name, 64)) fail('invalid_response');
   const device = { id: value.id, name: value.name };
   for (const field of ['createdAt', 'lastSeenAt']) {
     if (Object.hasOwn(value, field)) {
@@ -109,14 +119,18 @@ export function createKibiClient({ apiBase, deviceToken, fetchImpl = globalThis.
     });
     try {
       return await Promise.race([deadline, (async () => {
-        const response = await fetchImpl(url, {
+        let response;
+        try {
+          response = await fetchImpl(url, {
           method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
           redirect: 'error', credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer', signal: controller.signal,
         });
+        if (controller.signal.aborted) fail('timeout');
         if (!response || !Number.isInteger(response.status)) fail('invalid_response');
         if (response.redirected || (response.url && response.url !== url)) fail('invalid_response');
-        if (response.status !== expectedStatus) { void response.body?.cancel?.().catch(() => {}); fail('http_error', response.status); }
-        return await readJson(response);
+        if (response.status !== expectedStatus) fail('http_error', response.status);
+        return await readJson(response, controller.signal);
+        } finally { cancelBody(response); }
       })()]);
     } catch (error) {
       if (timedOut) fail('timeout');
@@ -128,7 +142,7 @@ export function createKibiClient({ apiBase, deviceToken, fetchImpl = globalThis.
     setDeviceToken,
     clearDeviceToken() { token = undefined; },
     async startPairing(input) {
-      if (!record(input) || !text(input.name, 64)) fail('invalid_argument');
+      if (!record(input) || !humanText(input.name, 64)) fail('invalid_argument');
       const value = await request('pairing/start', 'POST', { name: input.name }, false, 201);
       if (!record(value) || !text(value.pairingId, 256) || !/^[A-Z0-9-]{4,32}$/.test(value.code) || !secret(value.pollToken) || !iso(value.expiresAt) || value.intervalSeconds !== 3) fail('invalid_response');
       return { pairingId: value.pairingId, code: value.code, pollToken: value.pollToken, expiresAt: value.expiresAt, intervalSeconds: 3 };
@@ -145,7 +159,7 @@ export function createKibiClient({ apiBase, deviceToken, fetchImpl = globalThis.
       return { status: 'paired', device: safeDevice(value.device), token: value.token, apiBase: base };
     },
     async sendEvent(input) {
-      if (!record(input) || !text(input.title, 120) || (input.message !== undefined && !messageText(input.message)) ||
+      if (!record(input) || !title(input.title) || (input.message !== undefined && !messageText(input.message)) ||
         (input.eventId !== undefined && (typeof input.eventId !== 'string' || !/^[A-Za-z0-9_.:-]{1,100}$/.test(input.eventId)))) fail('invalid_argument');
       const value = await request('device/events', 'POST', { title: input.title, message: input.message ?? '', ...(input.eventId !== undefined ? { eventId: input.eventId } : {}) }, true);
       if (!record(value) || value.ok !== true || !text(value.eventId, 256) || typeof value.duplicate !== 'boolean') fail('invalid_response');
@@ -155,7 +169,7 @@ export function createKibiClient({ apiBase, deviceToken, fetchImpl = globalThis.
       const value = await request('device/messages', 'GET', undefined, true);
       if (!record(value) || !Array.isArray(value.messages) || value.messages.length > 50) fail('invalid_response');
       return { messages: value.messages.map(message => {
-        if (!record(message) || !text(message.id, 256) || !text(message.title, 120) || !messageText(message.message) || !iso(message.createdAt)) fail('invalid_response');
+        if (!record(message) || !text(message.id, 256) || !title(message.title) || !messageText(message.message) || !iso(message.createdAt)) fail('invalid_response');
         return { id: message.id, title: message.title, message: message.message, createdAt: message.createdAt };
       }) };
     },

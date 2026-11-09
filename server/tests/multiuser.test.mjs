@@ -4,6 +4,7 @@ import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createKibiServer} from '../src/server.mjs';
+import {createHash} from 'node:crypto';
 
 const origin='http://localhost:4391',password='a strong test password';
 async function fixture(t){
@@ -13,8 +14,8 @@ async function fixture(t){
  await start();t.after(async()=>{await stop();await rm(dir,{recursive:true,force:true});});
  const call=async(path,{method='GET',body,session,token,headers={}}={})=>{
   const response=await fetch(base+path,{method,headers:{...(body!==undefined?{'Content-Type':'application/json'}:{}),...(session?{Origin:origin,Cookie:session.cookie,'X-CSRF-Token':session.csrf}:{}),...(token?{Authorization:`Bearer ${token}`} : {}),...headers},...(body!==undefined?{body:JSON.stringify(body)}:{})});
-  const text=await response.text();let json;try{json=JSON.parse(text);}catch{}
-  return {status:response.status,headers:response.headers,json,text};
+  const bytes=Buffer.from(await response.arrayBuffer()),text=bytes.toString('utf8');let json;try{json=JSON.parse(text);}catch{}
+  return {status:response.status,headers:response.headers,json,text,bytes};
  };
  const auth=async(email,path='/api/register')=>{
   const r=await call(path,{method:'POST',body:{...(email?{email}:{}),password},headers:{Origin:origin}});assert.ok([200,201].includes(r.status),JSON.stringify(r.json));
@@ -47,6 +48,20 @@ test('email accounts isolate devices, events, messages, integrations and owner p
  assert.equal((await f.call('/api/device/messages',{token:da.token})).json.messages.length,1);
  assert.equal((await f.call('/api/settings',{session:again})).json.ai.configured,true);
  const disk=await readFile(join(f.dir,'accounts',a.user.id,'state.json'),'utf8');assert.ok(!disk.includes(apiKey));assert.ok(!disk.includes(da.token));
+});
+
+test('public hardware instructions and support archive match the advertised release over HTTP',async t=>{
+ const f=await fixture(t),meta=await f.call('/api/sdk');
+ assert.equal(meta.json.deviceContract,'1.0');assert.equal(meta.json.supportRelease,'2026-11-09-r1');
+ for(const path of ['/docs/HARDWARE.md','/docs/SERVICES.md','/docs/SDK_UPDATE.md','/sdk/device/contract.json','/sdk/device/doctor.mjs','/sdk/device/update.mjs','/sdk/device/README.md']){
+  const result=await f.call(path);assert.equal(result.status,200,path);assert.ok(result.bytes.length>100,path);
+ }
+ const release=await f.call('/sdk/device/release.json');assert.equal(release.status,200);
+ const archive=await f.call('/'+release.json.archive.path);assert.equal(archive.status,200);
+ assert.equal(archive.headers.get('content-type'),'application/gzip');assert.equal(archive.bytes.length,release.json.archive.bytes);
+ assert.equal(createHash('sha256').update(archive.bytes).digest('hex'),release.json.archive.sha256);
+ assert.equal((await f.call('/sdk/device/overlays/profiles.json')).status,404);
+ assert.equal((await f.call('/.data/state.json')).status,404);
 });
 
 test('pairing code attaches to claiming account and polling releases token only to device',async t=>{

@@ -1,0 +1,15 @@
+import {SCREEN_FIRMWARE_MIGRATIONS} from './screen-migrations.mjs';
+import {DEVICE_FIRMWARE_MIGRATIONS} from './device-migrations.mjs';
+
+// Exact reviewed public inputs only. Original source provenance is retained.
+export const MODULE_FIRMWARE_MIGRATIONS=Object.freeze({
+ 'wifi.h':Object.freeze({from:'06ef13ced44a002c88151a5e4da4be94848b662959a2ecc9df73d30e5e126e16',previous:Object.freeze(['2c6af68d02eaac288a522bad4b70f45cd702d81da6e1e240948a7683706c8d4a']),to:'1a7194458882062a18d7b1250bccb99b6712a294c07b9c121e01252c86497d4d'}),
+ 'state_info.h':Object.freeze({from:'30f0a5b3577071361ae2fc065ea7009b99a9b9ca988c610d02dab534920a23b0',to:'108f90528b43835fca60f6a2fc2c4e4e55b12ec4ff84b7d1906f8f937f0383ee'}),
+ 'http_json.h':Object.freeze({from:'0d71113432682654d8e08aa06fa8c31711db3d7ceb4ffb90127d7fef5c97661a',to:'8156d3166158db7b4fc4abb6f956323a8c2f12e5724303a6565d61baa5d2a6d6'})
+});
+export const REVIEWED_FIRMWARE_MIGRATIONS=Object.freeze({...SCREEN_FIRMWARE_MIGRATIONS,...DEVICE_FIRMWARE_MIGRATIONS,...MODULE_FIRMWARE_MIGRATIONS});
+export function moduleReadiness(files,protectedHashes){
+ const current=new Map(files.map(file=>[file.path,file.sha256]));
+ const reviewed=name=>protectedHashes?.[name]===MODULE_FIRMWARE_MIGRATIONS[name].to&&current.get(name)===MODULE_FIRMWARE_MIGRATIONS[name].to;
+ return {wifiModuleReady:reviewed('wifi.h')&&reviewed('state_info.h'),apiModuleReady:reviewed('http_json.h')};
+}

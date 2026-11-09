@@ -14,6 +14,9 @@ const TTL=12*60*60*1000;
 const PUBLIC=new Map([
  ['/docs/API.md',['../docs/API.md','text/plain; charset=utf-8']],
  ['/docs/MODULES.md',['../docs/MODULES.md','text/plain; charset=utf-8']],
+ ['/docs/HARDWARE.md',['../docs/HARDWARE.md','text/plain; charset=utf-8']],
+ ['/docs/SERVICES.md',['../docs/SERVICES.md','text/plain; charset=utf-8']],
+ ['/docs/SDK_UPDATE.md',['../docs/SDK_UPDATE.md','text/plain; charset=utf-8']],
  ['/docs/VOICE.md',['../docs/VOICE.md','text/plain; charset=utf-8']],
  ['/docs/SDK.md',['../docs/SDK.md','text/plain; charset=utf-8']],
  ['/docs/LOCAL_STUDIO.md',['../docs/LOCAL_STUDIO.md','text/plain; charset=utf-8']],
@@ -21,6 +24,12 @@ const PUBLIC=new Map([
  ['/sdk/client.mjs',['../sdk/client.mjs','text/javascript; charset=utf-8']],
  ['/sdk/manifest.mjs',['../sdk/manifest.mjs','text/javascript; charset=utf-8']],
  ['/sdk/validate.mjs',['../sdk/validate.mjs','text/javascript; charset=utf-8']],
+ ['/sdk/device/contract.json',['../sdk/device/contract.json','application/json; charset=utf-8']],
+ ['/sdk/device/release.json',['../sdk/device/release.json','application/json; charset=utf-8']],
+ ['/sdk/device/doctor.mjs',['../sdk/device/doctor.mjs','text/javascript; charset=utf-8']],
+ ['/sdk/device/update.mjs',['../sdk/device/update.mjs','text/javascript; charset=utf-8']],
+ ['/sdk/device/README.md',['../sdk/device/README.md','text/plain; charset=utf-8']],
+ ['/sdk/device/kibi-device-support-20261109.tar.gz',['../sdk/device/kibi-device-support-20261109.tar.gz','application/gzip']],
  ['/sdk/kibiplugin.schema.json',['../sdk/kibiplugin.schema.json','application/json; charset=utf-8']],
  ['/examples/server-plugin/local-notification.kibiplugin',['../examples/server-plugin/local-notification.kibiplugin','application/json; charset=utf-8']],
  ['/examples/server-plugin/future-handler.kibiplugin',['../examples/server-plugin/future-handler.kibiplugin','application/json; charset=utf-8']],
@@ -122,7 +131,7 @@ export async function createIdentityServer(options,createTenant){
    if(method==='POST'&&path==='/api/logout'){
     const s=authorize(req,true);sessions.delete(s.key);setCookie(res,'',0);return json(res,200,{ok:true});
    }
-   if(method==='GET'&&path==='/api/sdk')return json(res,200,{version:'1.0',validation:true,execution:false,links:{instructions:'docs/LOCAL_STUDIO.md',sdk:'docs/SDK.md',client:'sdk/index.mjs',schema:'sdk/kibiplugin.schema.json',example:'examples/server-plugin/local-notification.kibiplugin'}});
+   if(method==='GET'&&path==='/api/sdk')return json(res,200,{version:'1.0',deviceContract:'1.0',supportRelease:'2026-11-09-r1',validation:true,execution:false,links:{instructions:'docs/LOCAL_STUDIO.md',sdk:'docs/SDK.md',hardware:'docs/HARDWARE.md',services:'docs/SERVICES.md',update:'docs/SDK_UPDATE.md',deviceContract:'sdk/device/contract.json',supportRelease:'sdk/device/release.json',client:'sdk/index.mjs',schema:'sdk/kibiplugin.schema.json',example:'examples/server-plugin/local-notification.kibiplugin'}});
    if(method==='POST'&&path==='/api/sdk/validate'){
     authorize(req,true);const body=await bodyOf(req,136*1024),result=validatePlugin(typeof body.package==='string'?body.package:JSON.stringify(body.package));
     return json(res,200,{ok:true,valid:result.ok,errors:result.errors||[],requiresRuntime:!!result.requiresRuntime,runtimeSupported:false});
