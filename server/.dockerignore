@@ -7,6 +7,16 @@
 !scripts/init.mjs
 !web/
 !web/**
+!sdk/
+!sdk/**
+!docs/
+!docs/SDK.md
+!docs/LOCAL_STUDIO.md
+!docs/API.md
+!docs/MODULES.md
+!examples/
+!examples/server-plugin/
+!examples/server-plugin/**
 !resources/
 !resources/xiaozhi/
 !resources/xiaozhi/**

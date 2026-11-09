@@ -1,0 +1,21 @@
+{
+  "format": "kibi-plugin",
+  "manifestVersion": 1,
+  "sdkVersion": "1.0",
+  "id": "future-event-handler",
+  "version": "0.1.0",
+  "name": "Заготовка обработчика события",
+  "description": "Исходник для будущего исполнителя; сейчас он только проверяется как текст. Не установлен и не запущен.",
+  "capabilities": ["event-handler"],
+  "permissions": ["events:read", "notifications:create"],
+  "settings": [
+    { "key": "prefix", "label": "Подпись события", "type": "text", "default": "Киби", "required": false }
+  ],
+  "secrets": [
+    { "key": "integrationKey", "label": "Ключ будущей интеграции (пример объявления)", "required": false }
+  ],
+  "server": {
+    "language": "javascript",
+    "source": "// Предлагаемый контракт, исполнитель пока отсутствует.\n// Не делает сетевых запросов и не обращается к секретам.\nexport async function onDeviceEvent(event, context) {\n  return { notifications: [{ title: String(context.settings.prefix ?? 'Киби'), message: String(event.title) }] };\n}\n"
+  }
+}

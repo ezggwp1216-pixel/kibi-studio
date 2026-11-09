@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Kibi Plugin 1",
+  "description": "Структура JSON-пакета. Не разрешает исполнение кода и не подтверждает его безопасность.",
+  "$comment": "sdk/manifest.mjs дополнительно ограничивает весь UTF-8 пакет 128 КиБ, исходник 64 КиБ и проверяет уникальность key между settings и secrets. Валидатор принимает JSON-текст.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "manifestVersion", "sdkVersion", "id", "version", "name", "description", "capabilities", "permissions", "settings", "secrets"],
+  "properties": {
+    "format": { "const": "kibi-plugin" },
+    "manifestVersion": { "const": 1 },
+    "sdkVersion": { "const": "1.0" },
+    "id": { "type": "string", "maxLength": 64, "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$" },
+    "version": { "type": "string", "maxLength": 64, "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "\\S" },
+    "description": { "type": "string", "maxLength": 1000 },
+    "capabilities": {
+      "type": "array", "maxItems": 2, "uniqueItems": true,
+      "items": { "enum": ["event-handler", "message-handler"] }
+    },
+    "permissions": {
+      "type": "array", "maxItems": 4, "uniqueItems": true,
+      "items": { "enum": ["events:read", "messages:read", "messages:write", "notifications:create"] }
+    },
+    "settings": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/setting" } },
+    "secrets": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/secret" } },
+    "server": {
+      "type": "object", "additionalProperties": false, "required": ["language", "source"],
+      "properties": {
+        "language": { "const": "javascript" },
+        "source": { "type": "string", "minLength": 1, "maxLength": 65536, "pattern": "\\S" }
+      }
+    }
+  },
+  "$defs": {
+    "key": { "type": "string", "maxLength": 48, "pattern": "^(?!(?:constructor|prototype)$)[a-z][A-Za-z0-9_]{0,47}$" },
+    "label": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+    "setting": {
+      "type": "object", "additionalProperties": false, "required": ["key", "label", "type"],
+      "properties": {
+        "key": { "$ref": "#/$defs/key" },
+        "label": { "$ref": "#/$defs/label" },
+        "type": { "enum": ["text", "boolean", "number"] },
+        "required": { "type": "boolean" },
+        "default": {}
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "text" } } }, "then": { "properties": { "default": { "type": "string", "maxLength": 2000 } } } },
+        { "if": { "properties": { "type": { "const": "boolean" } } }, "then": { "properties": { "default": { "type": "boolean" } } } },
+        { "if": { "properties": { "type": { "const": "number" } } }, "then": { "properties": { "default": { "type": "number" } } } }
+      ]
+    },
+    "secret": {
+      "type": "object", "additionalProperties": false, "required": ["key", "label", "required"],
+      "properties": {
+        "key": { "$ref": "#/$defs/key" },
+        "label": { "$ref": "#/$defs/label" },
+        "required": { "type": "boolean" }
+      }
+    }
+  }
+}

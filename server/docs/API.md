@@ -1,12 +1,13 @@
 # API Kibi Server 0.1
 
-All JSON is UTF-8. Mutations in the admin panel require the configured exact `Origin`, the HttpOnly session cookie and `X-CSRF-Token` from `/api/session`. Login requires Origin but no prior session. Errors return `{ok:false,code:"fixed_code"}` without exception bodies or secrets. JSON bodies are limited to 16 KiB. Device routes use `Authorization: Bearer <deviceToken>` and do not use browser sessions.
+All JSON is UTF-8. Panel mutations require the configured exact `Origin`, the HttpOnly session cookie and `X-CSRF-Token` from `/api/session`. Login and registration require Origin but no prior session. Errors return `{ok:false,code:"fixed_code"}` without exception bodies or secrets. JSON bodies are limited to 16 KiB except the explicit SDK validation wrapper (136 KiB). Device routes use `Authorization: Bearer <deviceToken>` and do not use browser sessions. All panel devices, events and integrations are scoped to the authenticated account; HTTP cannot select another owner.
 
 | Method and path | Input | Output |
 | --- | --- | --- |
 | GET /api/health | none | `{ok:true,name:"kibi-server",version:"0.1.0"}` |
-| GET /api/session | cookie if present | `{authenticated:false}` or `{authenticated:true,csrfToken}` |
-| POST /api/login | `{password}` | `{ok:true,csrfToken}` + HttpOnly SameSite=Strict cookie |
+| GET /api/session | cookie if present | `{authenticated:false}` or `{authenticated:true,csrfToken,user}` |
+| POST /api/register | `{email,password}` | 201 `{ok:true,csrfToken,user}` + session; empty personal cabinet |
+| POST /api/login | `{email,password}` for users; `{password}` for existing owner | `{ok:true,csrfToken,user}` + HttpOnly SameSite=Strict cookie |
 | POST /api/logout | none | `{ok:true}` + expire cookie |
 | GET /api/overview | admin | `{server:{status:"ready",version,uptimeSeconds},devices:[],events:[],modules:[]}` |
 | POST /api/devices | `{name}` (1–64 chars) | `{device:{id,name,createdAt,lastSeenAt,status},token}` token displayed once |
@@ -57,3 +58,71 @@ The official Xiaozhi device WebSocket `hello` advertises `features:{playback_ack
 Only those four fields and optional matching `session_id` are allowed; `audio_end_ms` is forbidden. Send it only after receiving the matching normal `tts/stop` and completing terminal local playback cleanup when full playout cannot be proven, such as mute, text-only playback handling or volume invalidation. It is a rejected terminal resolution, not a playback ACK: it leaves `acknowledgedMs` and any real partial ACK unchanged, reports no heard duration, and performs no cloud history truncation. Full hardware-backed `playback` ACK retains its existing meaning and validation.
 
 The first rejection requires the current noninterrupted response, matching response/playback/session IDs, provider completion and submission of its normal STOP to the device transport. A rejection racing the STOP write callback is recorded but cannot resume upstream listening until that write succeeds. Resume requires completion plus successful STOP write and either full playback ACK or explicit rejected resolution; zero-audio replies still resume automatically without TTS. Bare microphone packets or another `listen/start` do not settle a pending reply. Duplicates of an accepted rejection are idempotent within the bounded last 32 playbacks, never settle a newer response, and do not send another upstream listen. Interrupted, unknown, mismatched, early or first-time stale resolutions close with `device_protocol_invalid`. Safe adapter snapshots add only the numeric `metrics.playbackRejections` counter; no response identifiers, ACK durations or terminal payloads are exposed. See [device voice contract and physical-test limits](VOICE.md).
+
+## Accounts and ownership
+
+`user` is `{id,email,createdAt,role:"user"}` for a registered account, or
+`{id:"owner",email:null,role:"owner"}` for the existing administrator. Email is
+normalized to lowercase; password length is 12–1024 characters. Email delivery,
+address verification and password recovery are not configured in this release.
+Registration is not proof of control over the address. Failed login returns
+`invalid_credentials`; invalid registration `invalid_registration`, unavailable
+address `account_unavailable`. No route accepts a role or target account ID.
+
+The existing root state/key remain the owner's. `accounts.json` holds private
+salted asynchronous scrypt password hashes. Each new account has an independent
+`accounts/<UUID>/state.json` and encryption key. Back up the WHOLE data directory;
+do not restore only state without its key. Maximum 128 accounts, 8 sessions/account,
+1024 sessions total, 4 concurrent account KDFs plus 4 owner KDFs. Sessions remain
+ephemeral for 12 hours and expire on restart. Login/registration share 10 requests
+per minute per connection address (forwarded headers are not trusted).
+
+Devices, events, inboxes, AI settings and Telegram credentials are scoped by the
+authenticated session or hashed device token. Opaque IDs do not authorize access.
+The existing owner voice gateway remains intact. New account voice reports
+`{configured:false,enabled:false,status:"disabled",code:"tenant_voice_unavailable",model:null,endpoint:null,tls:false,legacyConfigured:false,legacyReady:false,activeSessions:0}`.
+Their voice/Xiaozhi setup endpoints return 409 `tenant_voice_unavailable`; they
+cannot access the owner's personal Xiaozhi account or legacy project selection.
+This is application data isolation, not an untrusted-code execution boundary.
+
+## One-time device pairing
+
+| Method/path | Input | Result |
+| --- | --- | --- |
+| POST /api/pairing/start | device `{name}`; no prior token | 201 `{pairingId,code,pollToken,expiresAt,intervalSeconds:3}` |
+| POST /api/pairing/claim | session + Origin + CSRF, `{code}` | `{ok:true,device}`; NEVER a device token |
+| POST /api/pairing/poll | device `{pairingId,pollToken}` | `{status:"pending",expiresAt}` or once `{status:"paired",device,token,apiBase}` |
+
+Device code is eight characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, formatted
+`XXXX-XXXX`. Claim accepts case-insensitive input with spaces/hyphen removed.
+The visible code is not the secret poll credential. Both are stored only as hashes
+while pending. After claim only the device that holds the random 256-bit poll
+credential can collect the new token. The token's hash is already persisted in
+the claiming account. The temporary delivery value exists only in process memory.
+The configured `apiBase` includes the panel prefix, e.g. `https://host/server/`;
+it is never derived from an untrusted Host header.
+
+Pending entries expire after 5 minutes, maximum 64. Restart discards waiting
+pairings, not registered devices. Start is limited to 5/minute/address, poll
+120/minute/address, claim 20/minute/account. Unknown/expired/wrong-secret poll
+returns 410 `pairing_not_found`; malformed claim 400 `pairing_invalid_code`, already
+claimed 409 `pairing_claimed`. Claiming is atomic. A collected token cannot be
+collected again. If delivery is lost, delete that device in the cabinet and pair
+again; the server cannot reconstruct a token from its persisted hash. Device HTTP
+authentication has a bounded hash index and 2000/minute/address admission limit.
+
+Firmware must implement this protocol, TLS validation and safe token storage.
+The existing voice firmware is not automatically modified by registration or
+pairing support on the website. See [local Studio instructions](LOCAL_STUDIO.md).
+
+## SDK 1.0
+
+`GET /api/sdk` returns `{version:"1.0",validation:true,execution:false,links}`.
+`POST /api/sdk/validate` requires session/Origin/CSRF and
+`{package:<JSON object or JSON text>}` up to a 136 KiB HTTP wrapper; the package
+itself is limited to 128 KiB. Response is
+`{ok:true,valid,errors:[{path,code}],requiresRuntime,runtimeSupported:false}`.
+It never returns the manifest/source, installs anything, executes JavaScript or
+contacts a provider. Invalid structure is a successful validation operation with
+`valid:false`. SDK source, schema, two examples and public instructions are served
+only from explicit allowlisted paths. See [SDK contract](SDK.md).

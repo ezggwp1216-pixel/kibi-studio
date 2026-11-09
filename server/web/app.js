@@ -1,8 +1,8 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
-const API_BASE = new URL('./', import.meta.url);
-const state = { authenticated: false, csrf: '', overview: null, settings: null, loadedSettings: false, refreshing: false, timer: null, section: 'overview', messageTarget: null, confirmAction: null, refreshFailed: false };
+const API_BASE = new URL('.', import.meta.url);
+const state = { authenticated: false, user: null, authMode: 'login', generation: 0, csrf: '', overview: null, settings: null, loadedSettings: false, refreshing: false, timer: null, section: 'overview', messageTarget: null, confirmAction: null, refreshFailed: false, instructions: '', instructionsLoading: false };
 const labels = { overview: 'Обзор', devices: 'Устройства', modules: 'Модули', guide: 'Инструкция' };
 const errorMessages = {
   origin_forbidden: 'Адрес панели не совпадает с KIBI_PUBLIC_ORIGIN. Откройте настроенный адрес сервера.',
@@ -16,6 +16,15 @@ const errorMessages = {
   server_busy: 'Сервер обрабатывает другие запросы. Подождите немного и повторите.',
   internal_error: 'Сервер не выполнил запрос. Проверьте его состояние и повторите.',
   invalid_password: 'Пароль не подошёл. Проверьте его и попробуйте снова.',
+  invalid_credentials: 'Почта или пароль не подошли. Проверьте данные и попробуйте снова.',
+  invalid_registration: 'Укажите корректную почту и пароль от 12 до 1024 символов.',
+  account_unavailable: 'Не удалось создать кабинет с этой почтой. Попробуйте войти или используйте другой адрес.',
+  account_limit: 'На сервере достигнут лимит кабинетов. Обратитесь к владельцу сервера.',
+  pairing_invalid_code: 'Введите 8 символов кода с экрана Киби: буквы A–Z и цифры 2–7.',
+  pairing_not_found: 'Код не найден или истёк. Получите новый код на Киби и повторите.',
+  pairing_claimed: 'Этот код уже подтверждён. Проверьте список устройств или получите новый код на Киби.',
+  pairing_limit: 'Слишком много попыток привязки. Подождите немного и повторите.',
+  tenant_voice_unavailable: 'Голос для личных кабинетов пока недоступен. API устройства и текстовый ИИ настраиваются отдельно.',
   unauthorized: 'Сессия завершилась. Войдите снова.',
   authentication_required: 'Сессия завершилась. Войдите снова.',
   invalid_origin: 'Адрес панели не совпадает с KIBI_PUBLIC_ORIGIN сервера. Откройте настроенный адрес или проверьте установку.',
@@ -50,6 +59,7 @@ class ApiError extends Error {
   constructor(code, status = 0) { super(errorMessages[code] || 'Запрос не выполнен. Проверьте настройки и повторите. Данные в форме сохранены.'); this.code = code; this.status = status; }
 }
 async function api(path, { method = 'GET', body, timeout = 45000 } = {}) {
+  const generation = state.generation;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
@@ -58,12 +68,14 @@ async function api(path, { method = 'GET', body, timeout = 45000 } = {}) {
     const response = await fetch(new URL(path.replace(/^\/+/, ''), API_BASE), { method, credentials: 'same-origin', cache: 'no-store', headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal });
     let data;
     try { data = await response.json(); } catch { throw new ApiError('server_error', response.status); }
+    if (generation !== state.generation) throw new ApiError('session_changed');
     if (!response.ok || data.ok === false) {
-      if (response.status === 401 && path !== '/api/login') showLogin('Сессия завершилась. Войдите снова.');
-      throw new ApiError(path === '/api/login' && response.status === 401 ? 'invalid_password' : (data.code || 'server_error'), response.status);
+      if (response.status === 401 && path !== '/api/login' && path !== '/api/register') { showLogin('Сессия завершилась. Войдите снова.'); throw new ApiError('session_changed'); }
+      throw new ApiError(path === '/api/login' && response.status === 401 ? (data.code || 'invalid_credentials') : (data.code || 'server_error'), response.status);
     }
     return data;
   } catch (error) {
+    if (generation !== state.generation) throw new ApiError('session_changed');
     if (error instanceof ApiError) throw error;
     throw new ApiError(error.name === 'AbortError' ? 'request_timeout' : 'network_error');
   } finally { clearTimeout(timer); }
@@ -74,7 +86,7 @@ function node(tag, className, text) { const el = document.createElement(tag); if
 function action(text, className, callback) { const el = node('button', className, text); el.type = 'button'; el.addEventListener('click', callback); return el; }
 function openDialog(id) { $(id).showModal(); }
 function closeDialog(id) { $(id).close(); }
-async function pending(button, task) { if (button.disabled) return; const dialog = button.closest('dialog'); if (dialog) dialog.dataset.pending = 'true'; const before = button.textContent; button.disabled = true; button.textContent = 'Выполняем…'; button.setAttribute('aria-busy', 'true'); try { return await task(); } finally { button.disabled = false; button.textContent = before; button.removeAttribute('aria-busy'); if (dialog) delete dialog.dataset.pending; } }
+async function pending(button, task) { if (button.disabled) return; const dialog = button.closest('dialog'); if (dialog) dialog.dataset.pending = 'true'; const before = button.textContent; button.disabled = true; button.textContent = 'Выполняем…'; button.setAttribute('aria-busy', 'true'); try { return await task(); } finally { button.disabled = button.dataset.ownerOnlyDisabled === 'true'; button.textContent = before; button.removeAttribute('aria-busy'); if (dialog) delete dialog.dataset.pending; } }
 function setSection(id, { focus = true, updateHash = true } = {}) {
   if (!labels[id]) id = 'overview'; state.section = id;
   for (const button of document.querySelectorAll('[data-section]')) { const selected = button.dataset.section === id; button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1; $(button.dataset.section).hidden = !selected; }
@@ -82,21 +94,57 @@ function setSection(id, { focus = true, updateHash = true } = {}) {
   if (updateHash && location.hash !== `#${id}`) history.replaceState(null, '', `#${id}`);
   if (focus) $('main').focus({ preventScroll: true });
 }
-function showLogin(message = '') {
-  state.authenticated = false; state.csrf = ''; state.settings = null; state.overview = null; state.loadedSettings = false;
-  $('voice-form').reset(); delete $('voice-form').dataset.dirty; $('xiaozhi-pairing').textContent='';
-  $('ai-form').reset(); $('telegram-form').reset(); delete $('ai-form').dataset.dirty; delete $('telegram-form').dataset.dirty;
+function setAuthMode(mode) {
+  state.authMode = ['login', 'register', 'owner'].includes(mode) ? mode : 'login';
+  const owner = state.authMode === 'owner'; const register = state.authMode === 'register';
+  for (const button of document.querySelectorAll('[data-auth-mode]')) button.setAttribute('aria-pressed', String(button.dataset.authMode === state.authMode));
+  $('auth-title').textContent = owner ? 'Владелец сервера' : register ? 'Создать свой кабинет' : 'Войти в кабинет';
+  $('auth-description').textContent = owner ? 'Отдельный вход владельца. Используйте пароль администратора, созданный при установке сервера.' : register ? 'Новый кабинет начнётся с пустого списка устройств и собственных настроек.' : 'Почта и пароль вашего личного кабинета на этом сервере.';
+  $('auth-email-field').hidden = owner; $('auth-email').disabled = owner; $('auth-email').required = !owner;
+  $('auth-password-label').textContent = owner ? 'Пароль администратора' : 'Пароль';
+  $('admin-password').autocomplete = register ? 'new-password' : 'current-password';
+  $('admin-password').minLength = register ? 12 : 1; $('admin-password').value = '';
+  $('registration-warning').hidden = !register; $('auth-password-note').hidden = !register;
+  $('auth-submit').textContent = register ? 'Создать кабинет ↗' : owner ? 'Войти как владелец ↗' : 'Войти в кабинет ↗';
+  $('auth-note').textContent = owner ? 'Этот вход открывает существующее хранилище владельца. Обычным пользователям нужен личный кабинет по почте.' : 'У каждого пользователя свои устройства, события и настройки интеграций.';
+  feedback('login-error', ''); $('auth-email').removeAttribute('aria-invalid'); $('admin-password').removeAttribute('aria-invalid');
+}
+function clearAccountUI() {
+  state.generation += 1; state.authenticated = false; state.user = null; state.csrf = ''; state.settings = null; state.overview = null; state.loadedSettings = false; state.refreshing = false; state.refreshFailed = false; state.messageTarget = null; state.confirmAction = null;
   clearInterval(state.timer); state.timer = null;
-  for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
-  $('device-token').value = ''; $('ai-key').value = ''; $('telegram-token').value = ''; $('telegram-chat').value = ''; $('ai-output').textContent = ''; $('ai-output').hidden = true;
+  for (const dialog of document.querySelectorAll('dialog')) { if (dialog.open) dialog.close(); delete dialog.dataset.pending; }
+  for (const form of document.querySelectorAll('form')) { form.reset(); delete form.dataset.dirty; }
+  for (const el of document.querySelectorAll('.form-feedback')) el.textContent = '';
+  for (const id of ['device-token', 'ai-key', 'ai-prompt', 'telegram-token', 'telegram-chat', 'admin-password', 'auth-email', 'message-title', 'message-body', 'sdk-package']) $(id).value = '';
+  for (const id of ['ai-output', 'xiaozhi-pairing', 'xiaozhi-status', 'voice-endpoint', 'voice-feedback', 'xiaozhi-feedback', 'account-email', 'account-role', 'topbar-account', 'message-dialog-title', 'message-explanation', 'confirm-title', 'confirm-description', 'global-message-text']) $(id).textContent = '';
+  for (const id of ['device-list', 'event-list', 'module-summary-list', 'sdk-errors']) $(id).replaceChildren();
+  for (const id of ['device-list', 'event-list']) $(id).setAttribute('aria-busy', 'true');
+  for (const id of ['ai-status', 'telegram-status', 'voice-status', 'notifications-status']) { $(id).textContent = 'Загружаем'; $(id).className = 'status-label neutral'; }
+  for (const id of ['device-count', 'event-count', 'uptime']) $(id).textContent = '—';
+  $('server-status').textContent = 'Проверяем состояние'; $('server-detail').textContent = 'Получаем данные от сервера.'; $('sync-status').textContent = 'Загружаем данные'; $('voice-detail').textContent = 'Получаем состояние голосового шлюза…';
+  $('sdk-status').textContent = 'Контракт SDK'; $('sdk-errors').hidden = true; $('ai-output').hidden = true; $('global-message').hidden = true; $('refresh').disabled = false;
+  setVoicePermissions(false);
+}
+function setVoicePermissions(owner) {
+  $('voice-owner-controls').hidden = !owner;
+  for (const control of $('voice-owner-controls').querySelectorAll('input, select, button')) { control.disabled = !owner; control.dataset.ownerOnlyDisabled = String(!owner); }
+  $('voice-intro').textContent = owner ? 'Живой разговор через ваш сервер: Xiaozhi или OpenAI. Одновременно работает один разговор. Провайдер выбирается явно.' : 'Голос для личных кабинетов пока недоступен. Уведомления, API устройства и текстовый ИИ настраиваются отдельно.';
+}
+function showLogin(message = '') {
+  const mode = state.user?.role === 'owner' ? 'owner' : state.authMode === 'owner' ? 'owner' : 'login';
+  clearAccountUI();
   $('app').hidden = true; $('login-screen').hidden = false; document.title = 'Вход — Киби Сервер';
-  $('device-list').replaceChildren(); $('event-list').replaceChildren();
-  $('global-message').hidden = true; feedback('login-error', message, !!message); $('admin-password').setAttribute('aria-invalid', String(!!message));
+  setAuthMode(mode); feedback('login-error', message, !!message);
   if (message) $('admin-password').focus();
 }
-async function enterApp(csrf) {
-  state.authenticated = true; state.csrf = csrf; $('login-screen').hidden = true; $('app').hidden = false; $('admin-password').value = ''; feedback('login-error', '');
+async function enterApp(data) {
+  clearAccountUI();
+  state.authenticated = true; state.csrf = data.csrfToken; state.user = data.user || { id: null, email: null, role: 'user' };
+  const owner = state.user.role === 'owner'; setVoicePermissions(owner);
+  $('account-role').textContent = owner ? 'Владелец сервера' : 'Личный кабинет'; $('account-email').textContent = state.user.email || ''; $('topbar-account').textContent = state.user.email || 'Владелец сервера';
+  $('login-screen').hidden = true; $('app').hidden = false; feedback('login-error', '');
   setSection(location.hash.slice(1), { focus: false });
+  loadStudioInstructions(); loadSdkStatus();
   await refreshData();
   if (state.authenticated) { clearInterval(state.timer); state.timer = setInterval(() => { if (!document.hidden && state.authenticated) refreshData(true); }, 15000); }
 }
@@ -118,7 +166,7 @@ function renderEvents(events) {
 }
 function renderDevices(devices) {
   const list = $('device-list'); list.setAttribute('aria-busy', 'false'); list.replaceChildren();
-  if (!devices.length) { list.append(empty('Здесь будет ваша Киби.', 'Добавьте устройство, сохраните его токен и передайте приложению. Готовых подключений пока нет.', 'Добавить устройство ↗', openCreate)); return; }
+  if (!devices.length) { list.append(empty('Здесь будет ваша Киби.', 'Введите код с экрана совместимого приложения. Готовых подключений пока нет.', 'Привязать Киби ↗', openPairing)); return; }
   const statuses = { not_seen: ['Ожидает подключения', 'neutral'], online: ['Онлайн', ''], offline: ['Не на связи', 'neutral'] };
   for (const device of devices) { const row = node('article', 'device-row'); const info = node('div', 'device-info'); const icon = node('span', 'device-icon', '⌁'); icon.setAttribute('aria-hidden', 'true'); const copy = node('div'); copy.append(node('h2', '', device.name)); const meta = node('div', 'device-meta'); const [status, className] = statuses[device.status] || ['Статус неизвестен', 'neutral']; meta.append(node('span', `status-label ${className}`, status), node('span', '', device.lastSeenAt ? `Было на связи: ${formatDate(device.lastSeenAt, true)}` : 'Первого запроса ещё не было')); copy.append(meta); info.append(icon, copy); const actions = node('div', 'device-actions'); actions.append(action('Отправить сообщение ↗', 'button secondary', () => openMessage(device)), action('Отозвать токен', 'text-button danger', () => confirmRevoke(device))); row.append(info, actions); list.append(row); }
 }
@@ -127,15 +175,20 @@ function renderModuleSummary(modules) {
   const container = $('module-summary-list'); container.replaceChildren();
   for (const module of modules) { const row = node('div', 'summary-row'); const names = { notifications: 'Уведомления', telegram: 'Telegram', ai: 'Текстовый ИИ', voice: 'Голосовой ИИ', schedules: 'Расписания' }; let status = module.status === 'ready' ? 'Работает' : module.status === 'configured' ? 'Настроен' : module.status === 'planned' ? 'В планах' : 'Не настроен'; let ready = module.status === 'ready'; const setting = state.settings?.[module.id]; if (setting) { status = setting.configured ? (setting.enabled ? 'Включён' : 'Выключен') : 'Не настроен'; ready = setting.configured && setting.enabled; } if (module.id === 'voice') { const voice = setting || module; status = voiceLabel(voice); ready = voice.status === 'active' || voice.status === 'listening'; } row.append(node('span', '', names[module.id] || module.name), node('span', `summary-state${ready ? ' ready' : ''}`, status)); container.append(row); }
 }
-function voiceLabel(voice) { return ({disabled:'Выключен',not_configured:'Нужна настройка',listening:'Ожидает Киби',connecting:'Подключается',active:'Разговор идёт',error:'Нужна настройка',closed:'Остановлен'})[voice.status] || 'Недоступен'; }
+function voiceLabel(voice) { if (state.user?.role !== 'owner' || voice.code === 'tenant_voice_unavailable') return 'Пока недоступен'; return ({disabled:'Выключен',not_configured:'Нужна настройка',listening:'Ожидает Киби',connecting:'Подключается',active:'Разговор идёт',error:'Нужна настройка',closed:'Остановлен'})[voice.status] || 'Недоступен'; }
 function renderVoice(voice) {
+  if (state.user?.role !== 'owner' || voice?.code === 'tenant_voice_unavailable') {
+    setVoicePermissions(false); $('voice-status').textContent = 'Пока недоступен'; $('voice-status').className = 'status-label neutral'; $('voice-detail').textContent = 'Голос для личных кабинетов ещё не реализован. Это ограничение текущей версии; настройки голосового пилота владельца здесь недоступны.'; $('voice-endpoint').textContent = ''; $('xiaozhi-pairing').textContent = ''; return;
+  }
   if (!voice) return;
+  setVoicePermissions(true);
   $('voice-status').textContent = voiceLabel(voice);
   $('voice-status').className = `status-label${['listening','active'].includes(voice.status) ? '' : ' neutral'}`;
   const details = { disabled:'Голос выключен в настройках запуска сервера. Для включения следуйте docs/VOICE.md.', tls_required:'Не заданы приватные TLS-файлы голосового шлюза. Настройте их на сервере по docs/VOICE.md.', tls_failed:'TLS-файлы недоступны, небезопасны или сертификат не подходит. Проверьте их права, срок и соответствие ключу.', legacy_unavailable:'Хранилище совместимости со Studio недоступно. Проверьте установку на сервере.', gateway_unavailable:'Голосовой шлюз не запустился. Проверьте адрес, порт и настройки сервера.' };
   $('voice-detail').textContent = details[voice.code] || (voice.status === 'not_configured' ? 'Сохраните API-ключ OpenAI в модуле ИИ. Голос использует отдельную фиксированную модель gpt-realtime.' : voice.status === 'active' ? 'Киби подключена к голосовому шлюзу. Приём и воспроизведение звука проверяются на устройстве.' : voice.status === 'connecting' ? 'Киби устанавливает голосовое соединение. Дождитесь завершения подключения.' : 'TLS-шлюз запущен и ожидает устройство. Доступ к OpenAI и звук пока не подтверждены.');
   if(voice.provider==='xiaozhi') $('voice-detail').textContent = voice.configured ? (voice.status==='active'?'Разговор через Xiaozhi подключён. Звук проверяется на Киби.':'Выбран Xiaozhi. Платного переключения на OpenAI нет.') : 'Завершите привязку Xiaozhi и выберите один проект. OpenAI в этом режиме не используется.';
   const registration=voice.registration;
+  $('xiaozhi-status').textContent = 'Не подключён'; $('xiaozhi-pairing').textContent = '';
   if(registration){$('xiaozhi-status').textContent=registration.configured?'Аккаунт Xiaozhi привязан':registration.status==='pending'?'Ожидает привязку':registration.code?xiaozhiMessage(registration.code):'Не подключён';$('xiaozhi-pairing').textContent=registration.pairingCode?`Код устройства: ${registration.pairingCode}${registration.expiresAt?' · действует до '+new Date(registration.expiresAt).toLocaleTimeString('ru-RU'):''}`:'';}
   if(!$('voice-form').dataset.dirty){$('voice-provider').value=voice.provider||'openai';$('voice-scope-kind').value=voice.scope?.kind||'legacy';$('voice-scope-id').value=voice.scope?.id||'';}
   $('voice-provider').disabled=!!voice.providerLocked;
@@ -152,8 +205,17 @@ function renderSettings(fillForms = false) {
 }
 async function refreshData(silent = false) {
   if (!state.authenticated || state.refreshing) return;
+  const generation = state.generation;
   state.refreshing = true; const wasFailed = state.refreshFailed; $('refresh').disabled = true; if (!silent) $('sync-status').textContent = 'Обновляем…';
+  let session;
+  try { session = await api('/api/session'); }
+  catch (error) { if (generation !== state.generation || error.code === 'session_changed') return; state.refreshing = false; state.refreshFailed = true; $('refresh').disabled = false; $('sync-status').textContent = 'Связь прервана'; if (!silent || !wasFailed) announce(error.message, true, true); return; }
+  if (generation !== state.generation) return;
+  if (!session.authenticated) { showLogin('Сессия завершилась. Войдите снова.'); return; }
+  if (session.user?.id !== state.user?.id || session.user?.role !== state.user?.role || session.user?.email !== state.user?.email) { await enterApp(session); return; }
+  state.csrf = session.csrfToken;
   const results = await Promise.allSettled([api('/api/overview'), api('/api/settings')]);
+  if (generation !== state.generation) return;
   state.refreshing = false; $('refresh').disabled = false; if (!state.authenticated) return;
   const errors = [];
   if (results[0].status === 'fulfilled') { state.overview = results[0].value; renderOverview(); } else errors.push(results[0].reason);
@@ -162,20 +224,44 @@ async function refreshData(silent = false) {
   else { state.refreshFailed = false; $('sync-status').textContent = `Обновлено ${new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date())}`; if (wasFailed) announce('Связь восстановлена. Данные обновлены.'); }
 }
 function openCreate() { feedback('device-feedback', ''); openDialog('device-dialog'); $('device-name').focus(); }
+function openPairing() { $('pairing-form').reset(); $('pairing-code').removeAttribute('aria-invalid'); feedback('pairing-feedback', ''); openDialog('pairing-dialog'); $('pairing-code').focus(); }
 function openMessage(device) { state.messageTarget = device.id; $('message-dialog-title').textContent = `Для ${device.name}`; $('message-dialog-kicker').textContent = 'СООБЩЕНИЕ УСТРОЙСТВУ'; $('message-explanation').textContent = 'Сообщение попадёт в очередь. Устройство получит его при следующем запросе и должно подтвердить получение. Постановка в очередь не означает доставку.'; $('message-submit').textContent = 'Поставить в очередь'; feedback('message-feedback', ''); openDialog('message-dialog'); $('message-title').focus(); }
 function openEvent() { state.messageTarget = null; $('message-dialog-title').textContent = 'Проверить событие'; $('message-dialog-kicker').textContent = 'ТЕСТ СЕРВЕРА'; $('message-explanation').textContent = 'Событие появится в ленте сервера. Если Telegram включён, это действие отправит реальное сообщение в ваш сохранённый чат.'; $('message-submit').textContent = 'Создать событие'; feedback('message-feedback', ''); openDialog('message-dialog'); $('message-title').focus(); }
 function confirmAction(title, description, buttonText, callback) { $('confirm-title').textContent = title; $('confirm-description').textContent = description; $('confirm-action').textContent = buttonText; feedback('confirm-feedback', ''); state.confirmAction = callback; openDialog('confirm-dialog'); }
 function confirmRevoke(device) { confirmAction(`Отозвать токен «${device.name}»?`, 'Устройство потеряет доступ к серверу, а его очередь сообщений будет удалена. Для нового подключения потребуется создать устройство заново.', 'Отозвать токен', async () => { await api(`/api/devices/${encodeURIComponent(device.id)}`, { method: 'DELETE' }); announce(`Токен «${device.name}» отозван.`); await refreshData(); }); }
 async function copyText(text, button, feedbackId) {
-  try { if (!navigator.clipboard?.writeText) throw new Error('no_clipboard'); await navigator.clipboard.writeText(text); if (feedbackId) feedback(feedbackId, 'Скопировано. Сохраните в безопасном месте.'); else { const before = button.textContent; button.textContent = 'Скопировано ✓'; setTimeout(() => { button.textContent = before; }, 2500); } }
-  catch { if (feedbackId) { $('device-token').focus(); $('device-token').select(); feedback(feedbackId, 'Браузер не разрешил копирование. Токен выделен: скопируйте его вручную.', true); } else { const source = $(button.dataset.copy); const selection = window.getSelection(); const range = document.createRange(); range.selectNodeContents(source); selection.removeAllRanges(); selection.addRange(range); announce('Браузер не разрешил копирование. Текст выделен: скопируйте его вручную.'); } }
+  const generation = state.generation;
+  try { if (!navigator.clipboard?.writeText) throw new Error('no_clipboard'); await navigator.clipboard.writeText(text); if (generation !== state.generation) return; if (feedbackId) feedback(feedbackId, 'Скопировано. Сохраните в безопасном месте.'); else { const before = button.textContent; button.textContent = 'Скопировано ✓'; setTimeout(() => { button.textContent = before; }, 2500); } }
+  catch { if (generation !== state.generation) return; if (feedbackId) { $('device-token').focus(); $('device-token').select(); feedback(feedbackId, 'Браузер не разрешил копирование. Токен выделен: скопируйте его вручную.', true); } else { const source = $(button.dataset.copy); const selection = window.getSelection(); const range = document.createRange(); range.selectNodeContents(source); selection.removeAllRanges(); selection.addRange(range); announce('Браузер не разрешил копирование. Текст выделен: скопируйте его вручную.'); } }
+}
+async function loadStudioInstructions() {
+  if (state.instructionsLoading) return;
+  if (state.instructions) { $('bootstrap-prompt').textContent = state.instructions; $('copy-studio-prompt').disabled = false; return; }
+  state.instructionsLoading = true; $('load-studio-prompt').disabled = true;
+  feedback('studio-feedback', 'Загружаем общедоступную инструкцию…');
+  try {
+    const response = await fetch(new URL('docs/LOCAL_STUDIO.md', API_BASE), { credentials: 'omit', cache: 'no-store', headers: { Accept: 'text/markdown, text/plain' } });
+    if (!response.ok) throw new Error('instructions_unavailable');
+    const text = await response.text(); if (!text.trim() || text.length > 262144 || /^\s*<!doctype html/i.test(text)) throw new Error('instructions_invalid');
+    state.instructions = text; $('bootstrap-prompt').textContent = text; $('copy-studio-prompt').disabled = false;
+    feedback('studio-feedback', 'Инструкция загружена из docs/LOCAL_STUDIO.md. Она не содержит секретов вашего кабинета.');
+  } catch { feedback('studio-feedback', 'Не удалось загрузить инструкцию. Откройте ссылку выше или повторите загрузку.', true); }
+  finally { state.instructionsLoading = false; $('load-studio-prompt').disabled = false; }
+}
+async function loadSdkStatus() {
+  const generation = state.generation;
+  try { const data = await api('/api/sdk'); if (generation !== state.generation) return; $('sdk-status').textContent = data.validation ? `SDK ${data.version} · валидация` : 'Валидатор недоступен'; }
+  catch (error) { if (error.code === 'session_changed') return; $('sdk-status').textContent = 'Статус SDK не загружен'; }
 }
 
+for (const el of document.querySelectorAll('.api-base')) el.textContent = API_BASE.href;
+for (const button of document.querySelectorAll('[data-auth-mode]')) button.addEventListener('click', () => { if (!$('auth-submit').disabled) setAuthMode(button.dataset.authMode); });
 for (const button of document.querySelectorAll('[data-section]')) button.addEventListener('click', () => setSection(button.dataset.section, { focus: false }));
 const tabs = Array.from(document.querySelectorAll('[data-section]'));
 for (const tab of tabs) tab.addEventListener('keydown', (event) => { let index = tabs.indexOf(tab); if (['ArrowDown', 'ArrowRight'].includes(event.key)) index = (index + 1) % tabs.length; else if (['ArrowUp', 'ArrowLeft'].includes(event.key)) index = (index - 1 + tabs.length) % tabs.length; else if (event.key === 'Home') index = 0; else if (event.key === 'End') index = tabs.length - 1; else return; event.preventDefault(); tabs[index].focus(); setSection(tabs[index].dataset.section, { focus: false }); });
 for (const button of document.querySelectorAll('[data-go]')) button.addEventListener('click', () => setSection(button.dataset.go));
 for (const button of document.querySelectorAll('[data-action="create-device"]')) button.addEventListener('click', openCreate);
+for (const button of document.querySelectorAll('[data-action="pair-device"]')) button.addEventListener('click', openPairing);
 for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => { if (!$(button.dataset.close).dataset.pending) closeDialog(button.dataset.close); });
 for (const dialog of document.querySelectorAll('dialog')) dialog.addEventListener('cancel', (event) => { if (dialog.dataset.pending) event.preventDefault(); });
 for (const id of ['telegram-form', 'ai-form']) $(id).addEventListener('input', () => { $(id).dataset.dirty = 'true'; });
@@ -184,30 +270,52 @@ window.addEventListener('hashchange', () => { if (state.authenticated) setSectio
 $('token-dialog').addEventListener('close', () => { $('device-token').value = ''; feedback('token-feedback', ''); });
 $('confirm-dialog').addEventListener('close', () => { state.confirmAction = null; });
 $('copy-token').addEventListener('click', () => copyText($('device-token').value, $('copy-token'), 'token-feedback'));
+$('load-studio-prompt').addEventListener('click', loadStudioInstructions);
+$('pairing-dialog').addEventListener('close', () => { $('pairing-form').reset(); feedback('pairing-feedback', ''); });
+$('pairing-code').addEventListener('input', () => { const code = $('pairing-code').value.toUpperCase().replace(/[\s-]/g, '').slice(0, 8); $('pairing-code').value = code.length > 4 ? `${code.slice(0, 4)}-${code.slice(4)}` : code; $('pairing-code').removeAttribute('aria-invalid'); });
+$('pairing-form').addEventListener('submit', (event) => {
+  event.preventDefault(); const code = $('pairing-code').value.toUpperCase().replace(/[\s-]/g, '');
+  if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) { feedback('pairing-feedback', errorMessages.pairing_invalid_code, true); $('pairing-code').setAttribute('aria-invalid', 'true'); $('pairing-code').focus(); return; }
+  pending(event.submitter, async () => { feedback('pairing-feedback', ''); try { const data = await api('/api/pairing/claim', { method: 'POST', body: { code } }); closeDialog('pairing-dialog'); announce(`Киби${data.device?.name ? ` «${data.device.name}»` : ''} привязана. Токен получит само устройство; дождитесь его первого запроса.`); await refreshData(); } catch (error) { if (error.code === 'session_changed') return; feedback('pairing-feedback', error.message, true); $('pairing-code').setAttribute('aria-invalid', 'true'); $('pairing-code').focus(); } });
+});
+$('sdk-form').addEventListener('submit', (event) => {
+  event.preventDefault(); $('sdk-errors').replaceChildren(); $('sdk-errors').hidden = true; $('sdk-package').removeAttribute('aria-invalid');
+  let packageValue;
+  try { if (new TextEncoder().encode($('sdk-package').value).length > 131072) throw new Error('package_size'); packageValue = JSON.parse($('sdk-package').value); if (!packageValue || typeof packageValue !== 'object' || Array.isArray(packageValue)) throw new Error('package_object'); }
+  catch (error) { if (error.code === 'session_changed') return; feedback('sdk-feedback', error.message === 'package_size' ? 'Пакет должен быть не больше 128 КиБ.' : 'Вставьте корректный JSON-объект пакета. Массив или отдельная строка не подходят.', true); $('sdk-package').setAttribute('aria-invalid', 'true'); $('sdk-package').focus(); return; }
+  pending(event.submitter, async () => { feedback('sdk-feedback', 'Проверяем структуру без запуска кода…'); try { const result = await api('/api/sdk/validate', { method: 'POST', body: { package: packageValue } }); for (const error of result.errors || []) { const message = typeof error === 'string' ? error : [error.path, error.message || error.code].filter(Boolean).join(': '); $('sdk-errors').append(node('li', '', message || 'Ошибка структуры пакета.')); } $('sdk-errors').hidden = !($('sdk-errors').children.length); feedback('sdk-feedback', result.valid ? 'Структура пакета прошла проверку. Пакет не установлен и не запущен; исполнитель пользовательских плагинов пока недоступен.' : 'Структура пакета не прошла проверку. Исправьте ошибки и повторите. Код не запускался.', !result.valid); $('sdk-package').setAttribute('aria-invalid', String(!result.valid)); } catch (error) { if (error.code === 'session_changed') return; feedback('sdk-feedback', error.message, true); } });
+});
 $('create-event').addEventListener('click', openEvent);
 $('dismiss-message').addEventListener('click', () => { $('global-message').hidden = true; });
 $('refresh').addEventListener('click', () => refreshData()); $('retry').addEventListener('click', () => refreshData());
-$('login-form').addEventListener('submit', (event) => { event.preventDefault(); pending(event.submitter, async () => { feedback('login-error', ''); $('admin-password').setAttribute('aria-invalid', 'false'); try { const data = await api('/api/login', { method: 'POST', body: { password: $('admin-password').value } }); await enterApp(data.csrfToken); $('main').focus(); } catch (error) { feedback('login-error', error.message, true); $('admin-password').setAttribute('aria-invalid', 'true'); $('admin-password').focus(); } }); });
-$('logout').addEventListener('click', () => pending($('logout'), async () => { try { await api('/api/logout', { method: 'POST' }); showLogin(); $('admin-password').focus(); } catch (error) { if (state.authenticated) announce(error.message, true); } }));
-$('device-form').addEventListener('submit', (event) => { event.preventDefault(); const name = $('device-name').value.trim(); if (!name) { feedback('device-feedback', 'Введите название устройства.', true); $('device-name').focus(); return; } pending(event.submitter, async () => { feedback('device-feedback', ''); try { const data = await api('/api/devices', { method: 'POST', body: { name } }); closeDialog('device-dialog'); $('device-form').reset(); $('device-token').value = data.token; openDialog('token-dialog'); $('copy-token').focus(); await refreshData(); } catch (error) { feedback('device-feedback', error.message, true); } }); });
-$('message-form').addEventListener('submit', (event) => { event.preventDefault(); const title = $('message-title').value.trim(); if (!title) { feedback('message-feedback', 'Введите заголовок.', true); $('message-title').focus(); return; } const target = state.messageTarget; pending(event.submitter, async () => { feedback('message-feedback', ''); try { const data = await api(target === null ? '/api/events' : `/api/devices/${encodeURIComponent(target)}/messages`, { method: 'POST', body: { title, message: $('message-body').value } }); closeDialog('message-dialog'); $('message-form').reset(); if (target !== null) announce('Сообщение поставлено в очередь устройства. Подтверждение доставки пока не получено.'); else announce(data.event?.delivery === 'telegram_failed' ? 'Событие сохранено. Telegram не подтвердил доставку; проверьте настройки модуля.' : data.event?.delivery === 'telegram_sent' ? 'Событие сохранено и отправлено в Telegram.' : 'Событие сохранено на сервере.', data.event?.delivery === 'telegram_failed'); await refreshData(); } catch (error) { feedback('message-feedback', error.message, true); } }); });
-$('confirm-action').addEventListener('click', () => pending($('confirm-action'), async () => { try { if (state.confirmAction) await state.confirmAction(); closeDialog('confirm-dialog'); } catch (error) { feedback('confirm-feedback', error.message, true); } }));
-$('telegram-form').addEventListener('submit', (event) => { event.preventDefault(); if (!state.settings) { feedback('telegram-feedback', 'Настройки ещё не загружены. Нажмите «Обновить» и повторите.', true); return; } const token = $('telegram-token').value.trim(); const chatId = $('telegram-chat').value.trim(); if (!state.settings?.telegram?.configured && (!token || !chatId)) { feedback('telegram-feedback', 'Для первого подключения укажите токен бота и Chat ID.', true); (!token ? $('telegram-token') : $('telegram-chat')).focus(); return; } pending(event.submitter, async () => { feedback('telegram-feedback', ''); try { const result = await api('/api/settings/telegram', { method: 'POST', body: { token, chatId, enabled: $('telegram-enabled').checked } }); state.settings.telegram = result.telegram; $('telegram-token').value = ''; $('telegram-chat').value = ''; renderSettings(); feedback('telegram-feedback', 'Настройки сохранены. Проверка не отправлялась.'); } catch (error) { feedback('telegram-feedback', error.message, true); } }); });
-$('telegram-test').addEventListener('click', () => pending($('telegram-test'), async () => { feedback('telegram-feedback', ''); try { await api('/api/modules/telegram/test', { method: 'POST' }); feedback('telegram-feedback', 'Telegram подтвердил отправку проверки в сохранённый чат.'); } catch (error) { feedback('telegram-feedback', error.message, true); } }));
+$('login-form').addEventListener('submit', (event) => {
+  event.preventDefault(); const mode = state.authMode; const email = $('auth-email').value.trim(); const password = $('admin-password').value;
+  if (mode === 'register' && (password.length < 12 || password.length > 1024)) { feedback('login-error', errorMessages.invalid_registration, true); $('admin-password').setAttribute('aria-invalid', 'true'); $('admin-password').focus(); return; }
+  pending(event.submitter, async () => { feedback('login-error', ''); $('admin-password').removeAttribute('aria-invalid'); $('auth-email').removeAttribute('aria-invalid'); try { const data = await api(mode === 'register' ? '/api/register' : '/api/login', { method: 'POST', body: mode === 'owner' ? { password } : { email, password } }); await enterApp(data); if (state.authenticated) $('main').focus(); } catch (error) { if (error.code === 'session_changed') return; feedback('login-error', error.message, true); $('admin-password').setAttribute('aria-invalid', 'true'); if (mode !== 'owner') $('auth-email').setAttribute('aria-invalid', 'true'); $('admin-password').focus(); } });
+});
+$('logout').addEventListener('click', () => pending($('logout'), async () => { try { await api('/api/logout', { method: 'POST' }); showLogin(); (state.authMode === 'owner' ? $('admin-password') : $('auth-email')).focus(); } catch (error) { if (error.code === 'session_changed') return; if (state.authenticated) announce(error.message, true); } }));
+$('device-form').addEventListener('submit', (event) => { event.preventDefault(); const name = $('device-name').value.trim(); if (!name) { feedback('device-feedback', 'Введите название устройства.', true); $('device-name').focus(); return; } pending(event.submitter, async () => { feedback('device-feedback', ''); try { const data = await api('/api/devices', { method: 'POST', body: { name } }); closeDialog('device-dialog'); $('device-form').reset(); $('device-token').value = data.token; openDialog('token-dialog'); $('copy-token').focus(); await refreshData(); } catch (error) { if (error.code === 'session_changed') return; feedback('device-feedback', error.message, true); } }); });
+$('message-form').addEventListener('submit', (event) => { event.preventDefault(); const title = $('message-title').value.trim(); if (!title) { feedback('message-feedback', 'Введите заголовок.', true); $('message-title').focus(); return; } const target = state.messageTarget; pending(event.submitter, async () => { feedback('message-feedback', ''); try { const data = await api(target === null ? '/api/events' : `/api/devices/${encodeURIComponent(target)}/messages`, { method: 'POST', body: { title, message: $('message-body').value } }); closeDialog('message-dialog'); $('message-form').reset(); if (target !== null) announce('Сообщение поставлено в очередь устройства. Подтверждение доставки пока не получено.'); else announce(data.event?.delivery === 'telegram_failed' ? 'Событие сохранено. Telegram не подтвердил доставку; проверьте настройки модуля.' : data.event?.delivery === 'telegram_sent' ? 'Событие сохранено и отправлено в Telegram.' : 'Событие сохранено на сервере.', data.event?.delivery === 'telegram_failed'); await refreshData(); } catch (error) { if (error.code === 'session_changed') return; feedback('message-feedback', error.message, true); } }); });
+$('confirm-action').addEventListener('click', () => pending($('confirm-action'), async () => { try { if (state.confirmAction) await state.confirmAction(); closeDialog('confirm-dialog'); } catch (error) { if (error.code === 'session_changed') return; feedback('confirm-feedback', error.message, true); } }));
+$('telegram-form').addEventListener('submit', (event) => { event.preventDefault(); if (!state.settings) { feedback('telegram-feedback', 'Настройки ещё не загружены. Нажмите «Обновить» и повторите.', true); return; } const token = $('telegram-token').value.trim(); const chatId = $('telegram-chat').value.trim(); if (!state.settings?.telegram?.configured && (!token || !chatId)) { feedback('telegram-feedback', 'Для первого подключения укажите токен бота и Chat ID.', true); (!token ? $('telegram-token') : $('telegram-chat')).focus(); return; } pending(event.submitter, async () => { feedback('telegram-feedback', ''); try { const result = await api('/api/settings/telegram', { method: 'POST', body: { token, chatId, enabled: $('telegram-enabled').checked } }); state.settings.telegram = result.telegram; $('telegram-token').value = ''; $('telegram-chat').value = ''; renderSettings(); feedback('telegram-feedback', 'Настройки сохранены. Проверка не отправлялась.'); } catch (error) { if (error.code === 'session_changed') return; feedback('telegram-feedback', error.message, true); } }); });
+$('telegram-test').addEventListener('click', () => pending($('telegram-test'), async () => { feedback('telegram-feedback', ''); try { await api('/api/modules/telegram/test', { method: 'POST' }); feedback('telegram-feedback', 'Telegram подтвердил отправку проверки в сохранённый чат.'); } catch (error) { if (error.code === 'session_changed') return; feedback('telegram-feedback', error.message, true); } }));
 $('telegram-delete').addEventListener('click', () => confirmAction('Удалить ключи Telegram?', 'Отправка событий в Telegram выключится. Токен бота и Chat ID будут удалены с сервера. Локальная лента событий сохранится.', 'Удалить ключи', async () => { await api('/api/settings/telegram', { method: 'DELETE' }); state.settings.telegram = { configured: false, enabled: false }; $('telegram-enabled').checked = false; $('telegram-token').value = ''; $('telegram-chat').value = ''; renderSettings(); feedback('telegram-feedback', 'Ключи удалены. Telegram выключен.'); }));
-$('ai-form').addEventListener('submit', (event) => { event.preventDefault(); if (!state.settings) { feedback('ai-feedback', 'Настройки ещё не загружены. Нажмите «Обновить» и повторите.', true); return; } const apiKey = $('ai-key').value.trim(); if (!state.settings?.ai?.configured && !apiKey) { feedback('ai-feedback', 'Для первого подключения укажите API-ключ OpenAI.', true); $('ai-key').focus(); return; } const model = $('ai-model').value.trim(); if (!model) { feedback('ai-feedback', 'Укажите точное имя модели.', true); $('ai-model').focus(); return; } pending(event.submitter, async () => { feedback('ai-feedback', ''); try { const result = await api('/api/settings/ai', { method: 'POST', body: { apiKey, model, systemPrompt: $('ai-prompt').value, enabled: $('ai-enabled').checked } }); state.settings.ai = result.ai; state.settings.voice = result.voice || state.settings.voice; $('ai-key').value = ''; renderSettings(); feedback('ai-feedback', 'Настройки сохранены. Запрос в OpenAI не отправлялся.'); } catch (error) { feedback('ai-feedback', error.message, true); } }); });
+$('ai-form').addEventListener('submit', (event) => { event.preventDefault(); if (!state.settings) { feedback('ai-feedback', 'Настройки ещё не загружены. Нажмите «Обновить» и повторите.', true); return; } const apiKey = $('ai-key').value.trim(); if (!state.settings?.ai?.configured && !apiKey) { feedback('ai-feedback', 'Для первого подключения укажите API-ключ OpenAI.', true); $('ai-key').focus(); return; } const model = $('ai-model').value.trim(); if (!model) { feedback('ai-feedback', 'Укажите точное имя модели.', true); $('ai-model').focus(); return; } pending(event.submitter, async () => { feedback('ai-feedback', ''); try { const result = await api('/api/settings/ai', { method: 'POST', body: { apiKey, model, systemPrompt: $('ai-prompt').value, enabled: $('ai-enabled').checked } }); state.settings.ai = result.ai; state.settings.voice = result.voice || state.settings.voice; $('ai-key').value = ''; renderSettings(); feedback('ai-feedback', 'Настройки сохранены. Запрос в OpenAI не отправлялся.'); } catch (error) { if (error.code === 'session_changed') return; feedback('ai-feedback', error.message, true); } }); });
 $('ai-delete').addEventListener('click', () => confirmAction('Удалить ключ ИИ?', 'Ключ OpenAI будет удалён с сервера. Текстовые запросы перестанут работать, а голосовые разговоры по этому ключу завершатся.', 'Удалить ключ', async () => { await api('/api/settings/ai', { method: 'DELETE' }); state.settings.ai = { ...state.settings.ai, configured: false, enabled: false }; $('ai-enabled').checked = false; $('ai-key').value = ''; await refreshData(); feedback('ai-feedback', 'Ключ удалён. Запросы ИИ с этим ключом выключены.'); }));
-$('ai-test-form').addEventListener('submit', (event) => { event.preventDefault(); const text = $('ai-test-text').value.trim(); if (!text) { feedback('ai-test-feedback', 'Введите текст для Киби.', true); $('ai-test-text').focus(); return; } pending(event.submitter, async () => { feedback('ai-test-feedback', 'Отправляем запрос с сохранёнными настройками…'); try { const result = await api('/api/modules/ai/test', { method: 'POST', body: { text }, timeout: 60000 }); $('ai-output').textContent = result.text; $('ai-output').hidden = false; feedback('ai-test-feedback', 'Ответ получен. Следующий запрос начнёт отдельный диалог.'); } catch (error) { feedback('ai-test-feedback', error.message, true); } }); });
+$('ai-test-form').addEventListener('submit', (event) => { event.preventDefault(); const text = $('ai-test-text').value.trim(); if (!text) { feedback('ai-test-feedback', 'Введите текст для Киби.', true); $('ai-test-text').focus(); return; } pending(event.submitter, async () => { feedback('ai-test-feedback', 'Отправляем запрос с сохранёнными настройками…'); try { const result = await api('/api/modules/ai/test', { method: 'POST', body: { text }, timeout: 60000 }); $('ai-output').textContent = result.text; $('ai-output').hidden = false; feedback('ai-test-feedback', 'Ответ получен. Следующий запрос начнёт отдельный диалог.'); } catch (error) { if (error.code === 'session_changed') return; feedback('ai-test-feedback', error.message, true); } }); });
 
 async function boot() {
+  const generation = state.generation;
   const results = await Promise.allSettled([api('/api/health'), api('/api/session')]);
+  if (generation !== state.generation) return;
   $('connection-note').textContent = results[0].status === 'fulfilled' ? `Киби Сервер ${results[0].value.version} · соединение установлено` : 'Нет связи с сервером. Проверьте адрес и перезагрузите страницу.';
-  if (results[1].status === 'fulfilled' && results[1].value.authenticated) await enterApp(results[1].value.csrfToken);
+  if (results[1].status === 'fulfilled' && results[1].value.authenticated) await enterApp(results[1].value);
   else if (results[1].status === 'rejected') feedback('login-error', results[1].reason.message, true);
 }
+setAuthMode('login');
 boot();
 
 function xiaozhiMessage(code){return ({xiaozhi_pending:'Добавьте устройство по коду в Xiaozhi и повторите проверку.',xiaozhi_challenge_expired:'Код истёк. Получите новый.',xiaozhi_not_configured:'Получите код для привязки.',xiaozhi_untrusted_endpoint:'Сервис вернул неподдерживаемый адрес.',xiaozhi_mqtt_unsupported:'Аккаунт выдал MQTT. Эта версия поддерживает WebSocket.',xiaozhi_timeout:'Xiaozhi не ответил вовремя. Повторите позже.',xiaozhi_busy:'Настройка уже выполняется.',xiaozhi_provider_failed:'Не удалось связаться с Xiaozhi. Повторите позже.'})[code]||'Привязка пока не завершена. Повторите настройку.';}
 $('voice-form').addEventListener('input',()=>{$('voice-form').dataset.dirty='1';});
-$('voice-form').addEventListener('submit',event=>{event.preventDefault();pending(event.submitter,async()=>{try{const result=await api('/api/settings/voice',{method:'POST',body:{provider:$('voice-provider').value,scope:{kind:$('voice-scope-kind').value,id:$('voice-scope-id').value.trim()}}});state.settings.voice=result.voice;delete $('voice-form').dataset.dirty;renderVoice(result.voice);feedback('voice-feedback','Режим сохранён. Активный разговор завершён; следующий начнётся с выбранным провайдером.');}catch(error){feedback('voice-feedback',error.message,true);}});});
-for(const [id,operation] of [['xiaozhi-prepare','prepare'],['xiaozhi-activate','activate']])$(id).addEventListener('click',event=>pending(event.currentTarget,async()=>{try{const result=await api('/api/settings/xiaozhi/'+operation,{method:'POST',body:{}});state.settings.voice=result.voice;renderVoice(result.voice);feedback('xiaozhi-feedback',result.registration.configured?'Привязка подтверждена. Модель и голос выбираются в Xiaozhi.':'Добавьте устройство в Xiaozhi по коду выше, затем проверьте привязку.');}catch(error){feedback('xiaozhi-feedback',xiaozhiMessage(error.code),true);await refreshData();}}));
+$('voice-form').addEventListener('submit',event=>{event.preventDefault();if(state.user?.role!=='owner')return;pending(event.submitter,async()=>{try{const result=await api('/api/settings/voice',{method:'POST',body:{provider:$('voice-provider').value,scope:{kind:$('voice-scope-kind').value,id:$('voice-scope-id').value.trim()}}});state.settings.voice=result.voice;delete $('voice-form').dataset.dirty;renderVoice(result.voice);feedback('voice-feedback','Режим сохранён. Активный разговор завершён; следующий начнётся с выбранным провайдером.');}catch(error){if(error.code==='session_changed')return;feedback('voice-feedback',error.message,true);}});});
+for(const [id,operation] of [['xiaozhi-prepare','prepare'],['xiaozhi-activate','activate']])$(id).addEventListener('click',event=>{if(state.user?.role!=='owner')return;return pending(event.currentTarget,async()=>{try{const result=await api('/api/settings/xiaozhi/'+operation,{method:'POST',body:{}});state.settings.voice=result.voice;renderVoice(result.voice);feedback('xiaozhi-feedback',result.registration.configured?'Привязка подтверждена. Модель и голос выбираются в Xiaozhi.':'Добавьте устройство в Xiaozhi по коду выше, затем проверьте привязку.');}catch(error){if(error.code==='session_changed')return;feedback('xiaozhi-feedback',xiaozhiMessage(error.code),true);await refreshData();}});});

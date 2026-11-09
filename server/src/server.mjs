@@ -8,6 +8,7 @@ import { sendTelegram, validTelegramCredentials } from './telegram.mjs';
 import { askAi, DEFAULT_MODEL, validApiKey, validModel } from './ai.mjs';
 import { readPrivateFile } from './private-files.mjs';
 import { startVoiceModule } from './voice.mjs';
+import { createIdentityServer } from './identity.mjs';
 
 const VERSION = '0.1.0';
 const SESSION_TTL = 12 * 60 * 60 * 1000;
@@ -45,7 +46,11 @@ async function bodyOf(req) {
   } catch { throw fail(400, 'invalid_json'); }
 }
 
-export async function createKibiServer({ dataDir, adminPassword, publicOrigin, fetchImpl = fetch, webRoot = fileURLToPath(new URL('../web/', import.meta.url)), voiceConfig, cookiePath = process.env.KIBI_COOKIE_PATH || '/' } = {}) {
+export async function createKibiServer(options = {}) {
+  return createIdentityServer(options, createTenantServer);
+}
+
+async function createTenantServer({ dataDir, adminPassword, publicOrigin, fetchImpl = fetch, webRoot = fileURLToPath(new URL('../web/', import.meta.url)), voiceConfig, cookiePath = process.env.KIBI_COOKIE_PATH || '/', sessionResolver, ordinaryUser = false, onDevicesChanged = () => {} } = {}) {
   let origin;
   try { origin = new URL(publicOrigin); } catch { throw new Error('invalid_public_origin'); }
   if (!['http:', 'https:'].includes(origin.protocol) || origin.origin !== publicOrigin) throw new Error('invalid_public_origin');
@@ -53,9 +58,12 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
   if (!/^\/(?:[A-Za-z0-9_-]+\/)*$/.test(cookiePath)) throw new Error('invalid_cookie_path');
   const store = await openStore(dataDir);
   const state = store.state;
-  const voice = await startVoiceModule({ store, publicOrigin, registrationFetch: fetchImpl, ...(voiceConfig ? { config: voiceConfig } : {}) });
+  const voice = ordinaryUser ? {
+    status: () => ({configured:false,enabled:false,status:'disabled',code:'tenant_voice_unavailable',model:null,endpoint:null,tls:false,legacyConfigured:false,legacyReady:false,activeSessions:0}),
+    reconcile() {}, close:async()=>{},
+  } : await startVoiceModule({ store, publicOrigin, registrationFetch: fetchImpl, ...(voiceConfig ? { config: voiceConfig } : {}) });
   const salt = randomBytes(16);
-  const passwordHash = scryptSync(adminPassword, salt, 32);
+  const passwordHash = sessionResolver ? null : scryptSync(adminPassword, salt, 32);
   adminPassword = undefined;
   const sessions = new Map(); const rates = new Map();
   const started = Date.now();
@@ -73,13 +81,13 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
     }
     if (++bucket.count > limit) throw fail(429, 'rate_limited');
   };
-  const sessionOf = req => {
+  const sessionOf = sessionResolver || (req => {
     const now = Date.now();
     for (const [key, value] of sessions) if (value.expires <= now) sessions.delete(key);
     const cookie = (req.headers.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith('kibi_session='));
     if (!cookie) return null;
     return sessions.get(sha(cookie.slice('kibi_session='.length))) || null;
-  };
+  });
   const requireOrigin = req => { if (req.headers.origin !== publicOrigin) throw fail(403, 'origin_forbidden'); };
   const admin = (req, mutation = false) => {
     const session = sessionOf(req);
@@ -104,6 +112,16 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
   const viewDevice = d => ({ id: d.id, name: d.name, createdAt: d.createdAt, lastSeenAt: d.lastSeenAt,
     status: !d.lastSeenAt ? 'not_seen' : Date.now() - Date.parse(d.lastSeenAt) <= 90000 ? 'online' : 'offline' });
   const viewEvent = ({ clientEventId, ...event }) => event;
+  const createDevice = async name => store.exclusive(async () => {
+    if (!text(name, 1, 64)) throw fail(400, 'invalid_input');
+    if (state.devices.length >= 50) throw fail(409, 'device_limit');
+    const token = secret();
+    const device = { id: randomUUID(), name: name.trim(), createdAt: new Date().toISOString(), lastSeenAt: null, tokenHash: sha(token), messages: [] };
+    state.devices.push(device);
+    try { await store.save(); } catch (error) { state.devices.splice(state.devices.indexOf(device), 1); throw error; }
+    onDevicesChanged(state.devices.map(d=>d.tokenHash));
+    return {device:viewDevice(device),token};
+  });
   const telegramStatus = () => {
     const credentials = store.telegram();
     return { configured: !!credentials, enabled: !!credentials?.enabled };
@@ -186,7 +204,7 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
           ] });
       }
       if (method === 'GET' && path === '/api/settings') { admin(req); return json(res, 200, { telegram: telegramStatus(), ai: aiStatus(), voice: voice.status() }); }
-      if (method === 'GET' && path === '/api/settings/xiaozhi') { admin(req); return json(res, 200, voice.registration.snapshot()); }
+      if (method === 'GET' && path === '/api/settings/xiaozhi') { admin(req); if(ordinaryUser)throw fail(409,'tenant_voice_unavailable'); return json(res, 200, voice.registration.snapshot()); }
       if (path.startsWith('/api/')) {
         // Authentication and body bounds occur before waiting for the persistence
         // queue. This prevents queued slow bodies from blocking other clients.
@@ -196,6 +214,7 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
         let body;
         const needsBody = method === 'POST' && !['/api/modules/telegram/test'].includes(path);
         if (needsBody) body = await bodyOf(req);
+        if (ordinaryUser && (path === '/api/settings/voice' || path.startsWith('/api/settings/xiaozhi/'))) throw fail(409,'tenant_voice_unavailable');
         // Network setup and its private writes run outside the store queue.
         if (!isDevice && method === 'POST' && path === '/api/settings/voice') {
           const selected = await voice.selectProvider(body); return json(res, 200, {ok:true,voice:selected});
@@ -251,14 +270,14 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
               if (state.devices.length >= 50) throw fail(409, 'device_limit');
               const token = secret();
               const device = { id: randomUUID(), name: body.name.trim(), createdAt: new Date().toISOString(), lastSeenAt: null, tokenHash: sha(token), messages: [] };
-              state.devices.push(device); await store.save(); return json(res, 200, { device: viewDevice(device), token });
+              state.devices.push(device); await store.save(); onDevicesChanged(state.devices.map(d=>d.tokenHash)); return json(res, 200, { device: viewDevice(device), token });
             }
             const match = /^\/api\/devices\/([A-Za-z0-9-]+)(\/messages)?$/.exec(path);
             if (match) {
               const index = state.devices.findIndex(x => x.id === match[1]);
               if (index < 0) throw fail(404, 'device_not_found');
               const device = state.devices[index];
-              if (method === 'DELETE' && !match[2]) { state.devices.splice(index, 1); await store.save(); voice.reconcile(); return json(res, 200, { ok: true }); }
+              if (method === 'DELETE' && !match[2]) { state.devices.splice(index, 1); await store.save(); onDevicesChanged(state.devices.map(d=>d.tokenHash)); voice.reconcile(); return json(res, 200, { ok: true }); }
               if (method === 'POST' && match[2]) {
                 const input = content(body);
                 if (device.messages.length >= 50) throw fail(409, 'message_limit');
@@ -307,6 +326,12 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
   server.headersTimeout = 10000;
   server.maxHeadersCount = 50;
   server.maxConnections = 256;
+  // Internal dispatcher contract, never exposed through HTTP or static files.
+  server.kibiContext = {
+    tokenHashes: () => state.devices.map(d=>d.tokenHash),
+    createDevice,
+    close: () => voice.close(),
+  };
   const closeHttp = server.close.bind(server);
   server.close = callback => {
     const closingVoice = voice.close();
