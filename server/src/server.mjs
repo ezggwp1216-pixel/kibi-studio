@@ -7,7 +7,7 @@ import { openStore } from './store.mjs';
 import { sendTelegram, validTelegramCredentials } from './telegram.mjs';
 import { askAi, DEFAULT_MODEL, validApiKey, validModel } from './ai.mjs';
 import { readPrivateFile } from './private-files.mjs';
-import { startVoiceModule } from './voice.mjs';
+import { startVoiceModule, createPanelVoiceAuthorizer } from './voice.mjs';
 import { createIdentityServer } from './identity.mjs';
 
 const VERSION = '0.1.0';
@@ -50,7 +50,7 @@ export async function createKibiServer(options = {}) {
   return createIdentityServer(options, createTenantServer);
 }
 
-async function createTenantServer({ dataDir, adminPassword, publicOrigin, fetchImpl = fetch, webRoot = fileURLToPath(new URL('../web/', import.meta.url)), voiceConfig, cookiePath = process.env.KIBI_COOKIE_PATH || '/', sessionResolver, ordinaryUser = false, onDevicesChanged = () => {} } = {}) {
+async function createTenantServer({ dataDir, adminPassword, publicOrigin, fetchImpl = fetch, webRoot = fileURLToPath(new URL('../web/', import.meta.url)), voiceConfig, cookiePath = process.env.KIBI_COOKIE_PATH || '/', sessionResolver, ordinaryUser = false, onDevicesChanged = () => {}, tenantVoiceStatus, authorizeDelegatedDevice, delegatedDeviceExists, studioAccountExists } = {}) {
   let origin;
   try { origin = new URL(publicOrigin); } catch { throw new Error('invalid_public_origin'); }
   if (!['http:', 'https:'].includes(origin.protocol) || origin.origin !== publicOrigin) throw new Error('invalid_public_origin');
@@ -58,10 +58,11 @@ async function createTenantServer({ dataDir, adminPassword, publicOrigin, fetchI
   if (!/^\/(?:[A-Za-z0-9_-]+\/)*$/.test(cookiePath)) throw new Error('invalid_cookie_path');
   const store = await openStore(dataDir);
   const state = store.state;
+  const delegatedAuthorizer = ordinaryUser ? createPanelVoiceAuthorizer({store,requireCredentials:false}) : null;
   const voice = ordinaryUser ? {
-    status: () => ({configured:false,enabled:false,status:'disabled',code:'tenant_voice_unavailable',model:null,endpoint:null,tls:false,legacyConfigured:false,legacyReady:false,activeSessions:0}),
-    reconcile() {}, close:async()=>{},
-  } : await startVoiceModule({ store, publicOrigin, registrationFetch: fetchImpl, ...(voiceConfig ? { config: voiceConfig } : {}) });
+    status: () => tenantVoiceStatus?.() || ({configured:false,enabled:false,status:'disabled',code:'tenant_voice_unavailable',model:null,endpoint:null,tls:false,legacyConfigured:false,legacyReady:false,activeSessions:0}),
+    reconcile: () => delegatedAuthorizer.reconcile(), close:async()=>{delegatedAuthorizer.close();},
+  } : await startVoiceModule({ store, publicOrigin, registrationFetch: fetchImpl, authorizeDelegatedDevice, delegatedDeviceExists, studioAccountExists, ...(voiceConfig ? { config: voiceConfig } : {}) });
   const salt = randomBytes(16);
   const passwordHash = sessionResolver ? null : scryptSync(adminPassword, salt, 32);
   adminPassword = undefined;
@@ -329,6 +330,10 @@ async function createTenantServer({ dataDir, adminPassword, publicOrigin, fetchI
   // Internal dispatcher contract, never exposed through HTTP or static files.
   server.kibiContext = {
     tokenHashes: () => state.devices.map(d=>d.tokenHash),
+    hasDevice: id => state.devices.some(device=>device.id===id),
+    listDevices: () => state.devices.map(viewDevice),
+    authorizeVoice: request => delegatedAuthorizer?.authorize(request) || null,
+    voice,
     createDevice,
     close: () => voice.close(),
   };

@@ -6,7 +6,7 @@ All JSON is UTF-8. Panel mutations require the configured exact `Origin`, the Ht
 | --- | --- | --- |
 | GET /api/health | none | `{ok:true,name:"kibi-server",version:"0.1.0"}` |
 | GET /api/session | cookie if present | `{authenticated:false}` or `{authenticated:true,csrfToken,user}` |
-| POST /api/register | `{email,password}` | 201 `{ok:true,csrfToken,user}` + session; empty personal cabinet |
+| POST /api/register | `{email,password}` | 201 `{ok:true,csrfToken,user,studioLink}` + session; empty personal cabinet and one-time Studio code |
 | POST /api/login | `{email,password}` for users; `{password}` for existing owner | `{ok:true,csrfToken,user}` + HttpOnly SameSite=Strict cookie |
 | POST /api/logout | none | `{ok:true}` + expire cookie |
 | GET /api/overview | admin | `{server:{status:"ready",version,uptimeSeconds},devices:[],events:[],modules:[]}` |
@@ -82,7 +82,8 @@ authenticated session or hashed device token. Opaque IDs do not authorize access
 The existing owner voice gateway remains intact. New account voice reports
 `{configured:false,enabled:false,status:"disabled",code:"tenant_voice_unavailable",model:null,endpoint:null,tls:false,legacyConfigured:false,legacyReady:false,activeSessions:0}`.
 Their voice/Xiaozhi setup endpoints return 409 `tenant_voice_unavailable`; they
-cannot access the owner's personal Xiaozhi account or legacy project selection.
+cannot configure the owner's provider or legacy project selection. The explicit
+owner-approved Studio voice pilot below is a separate, revocable permission.
 This is application data isolation, not an untrusted-code execution boundary.
 
 ## One-time device pairing
@@ -114,6 +115,56 @@ authentication has a bounded hash index and 2000/minute/address admission limit.
 Firmware must implement this protocol, TLS validation and safe token storage.
 The existing voice firmware is not automatically modified by registration or
 pairing support on the website. See [local Studio instructions](LOCAL_STUDIO.md).
+
+## Studio account connection
+
+Registration returns `studioLink:{code,expiresAt}`. This is an independent,
+single-use code with a 10-minute lifetime, not a password or device credential.
+If code persistence fails after registration, registration still succeeds with
+`studioLink:{code:null,error:"studio_link_unavailable"}`. The user can retry from
+the cabinet. Login never generates a code automatically.
+
+| Method/path | Authentication/input | Output |
+| --- | --- | --- |
+| POST /api/studio/link-code | ordinary user session + Origin/CSRF, `{}` | 201 `{code,expiresAt}`; invalidates previous unredeemed code |
+| GET /api/studio/connections | ordinary user session | `{connections:[{id,label,createdAt,expiresAt,scopes}]}` |
+| DELETE /api/studio/connections/:id | same session + Origin/CSRF | `{ok:true}`; own connections only |
+| POST /api/studio/redeem | no cookie authority; `{code,label}` | 201 `{token,connection,account,apiBase,scopes}`; code consumed once |
+| GET /api/studio/profile | Studio bearer | `{account,connection,scopes,voice,voiceEligibility}` |
+| GET /api/studio/devices | Studio bearer | `{devices}`; safe own devices only |
+| POST /api/studio/pairing/claim | Studio bearer, `{code}` | `{ok:true,device}`; no device token |
+| POST /api/studio/voice/activate | Studio bearer, `{deviceId}` | `{ok:true,voice}`; separate owner approval and device ownership required |
+| DELETE /api/studio/session | Studio bearer | `{ok:true}`; revokes only this connection |
+
+Bearer routes accept an absent Origin for the local server-to-server client.
+If Origin is supplied it must exactly match the configured public origin. Browser
+cookies do not authorize bearer routes; a Studio token cannot authorize panel
+settings. Scopes are fixed: `pairing.claim`, `devices.list`, `voice.status`,
+`voice.activate`, `catalog.read`. Tokens expire absolutely after 90 days, with no
+automatic renewal; maximum eight connections per account. Only code/token hashes
+are persisted on the server. Studio keeps its dedicated token in its private
+local file with mode 0600; tokens are never sent to the model or embedded in
+firmware. Revoking a Studio connection does not revoke the independently paired
+device; delete that device to revoke its own credential.
+
+## Shared Xiaozhi pilot permission
+
+Owner POST `/api/settings/voice/studio-account` with `{email}` plus session,
+Origin and CSRF approves one existing ordinary account; DELETE removes approval.
+Approval alone admits no voice connection. The account must pair its own device
+and explicitly activate it. Eligibility is `{approved,canActivate,code}`, also
+available in `voice.studioVoice`; `canActivate` requires configured Xiaozhi and an
+open gateway. Provider changes cannot be made by a user or Studio token. This
+personal pilot remains limited to one account, one selected device and one active
+conversation; it is not an unlimited multi-user voice service.
+
+Owner POST `/api/settings/voice/delegation` with `{email,deviceId}` explicitly
+selects an existing device; DELETE restores the previously selected owner/legacy
+scope. Studio activation creates a managed grant. Changing/revoking account
+approval removes only managed grants, preserving independently created manual
+grants. Device deletion, credential revocation or failed committed authorization
+closes its session. Ordinary profiles omit provider credentials, registration
+codes and other users' activity. No operation silently falls back to paid OpenAI.
 
 ## SDK 1.0
 

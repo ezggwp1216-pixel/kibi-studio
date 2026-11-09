@@ -5,6 +5,7 @@ import {randomBytes,createHash,scrypt,timingSafeEqual} from 'node:crypto';
 import {promisify} from 'node:util';
 import {openAccounts} from './accounts.mjs';
 import {createPairings} from './pairing.mjs';
+import {openStudioLinks,STUDIO_SCOPES} from './studio-links.mjs';
 import {validatePlugin} from '../sdk/manifest.mjs';
 
 const derive=promisify(scrypt), sha=value=>createHash('sha256').update(value).digest('hex');
@@ -20,6 +21,7 @@ const PUBLIC=new Map([
  ['/docs/VOICE.md',['../docs/VOICE.md','text/plain; charset=utf-8']],
  ['/docs/SDK.md',['../docs/SDK.md','text/plain; charset=utf-8']],
  ['/docs/LOCAL_STUDIO.md',['../docs/LOCAL_STUDIO.md','text/plain; charset=utf-8']],
+ ['/docs/STUDIO_CONNECTION.md',['../docs/STUDIO_CONNECTION.md','text/plain; charset=utf-8']],
  ['/sdk/index.mjs',['../sdk/index.mjs','text/javascript; charset=utf-8']],
  ['/sdk/client.mjs',['../sdk/client.mjs','text/javascript; charset=utf-8']],
  ['/sdk/manifest.mjs',['../sdk/manifest.mjs','text/javascript; charset=utf-8']],
@@ -74,18 +76,26 @@ export async function createIdentityServer(options,createTenant){
  };
  const setCookie=(res,value,age)=>res.setHeader('Set-Cookie',`kibi_session=${value}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=${age}${origin.protocol==='https:'?'; Secure':''}`);
  const json=(res,status,value)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(value));};
- const signIn=(req,res,user,status)=>{
+ const signIn=(req,res,user,status,extra={})=>{
   const previous=sessionOf(req);if(previous)sessions.delete(previous.key);
   const own=[...sessions.values()].filter(s=>s.user.id===user.id);if(own.length>=8)sessions.delete(own[0].key);
   if(sessions.size>=1024)throw fail(503,'server_busy');
   const token=secret(),s={key:sha(token),csrf:secret(),expires:Date.now()+TTL,user};
-  sessions.set(s.key,s);setCookie(res,token,TTL/1000);json(res,status,{ok:true,csrfToken:s.csrf,user});
+  sessions.set(s.key,s);setCookie(res,token,TTL/1000);json(res,status,{ok:true,csrfToken:s.csrf,user,...extra});
  };
  const coreOptions={...options,adminPassword:'unused delegated authentication',sessionResolver:resolver};
- const indexTokens=(id,hashes)=>{for(const [hash,ownerId]of deviceOwners)if(ownerId===id)deviceOwners.delete(hash);for(const hash of hashes)deviceOwners.set(hash,id);};
- const tenantOptions=(id,extra={})=>({...coreOptions,...extra,onDevicesChanged:hashes=>indexTokens(id,hashes)});
- const owner=await createTenant(tenantOptions('owner'));tenants.set('owner',owner);indexTokens('owner',owner.kibiContext.tokenHashes());
- let accounts;
+ let owner=null,accounts;
+ const indexTokens=(id,hashes)=>{for(const [hash,ownerId]of deviceOwners)if(ownerId===id)deviceOwners.delete(hash);for(const hash of hashes)deviceOwners.set(hash,id);owner?.kibiContext.voice.reconcile();};
+ const delegatedDeviceExists=grant=>!closed&&grant?.accountId!=='owner'&&tenants.get(grant?.accountId)?.kibiContext?.hasDevice(grant.deviceId)===true;
+ const studioAccountExists=id=>!closed&&id!=='owner'&&!!accounts?.get(id);
+ const authorizeDelegatedDevice=async({token,delegation})=>{
+  if(closed||!delegatedDeviceExists(delegation)||deviceOwners.get(sha(token))!==delegation.accountId)return null;
+  const tenant=tenants.get(delegation.accountId),permission=await tenant.kibiContext.authorizeVoice({token,deviceId:delegation.deviceId});
+  if(closed||!permission||!delegatedDeviceExists(delegation)||deviceOwners.get(sha(token))!==delegation.accountId||permission.signal.aborted)return null;
+  return {...permission,principal:Object.freeze({kind:'account',accountId:delegation.accountId,id:permission.principal.id})};
+ };
+ const tenantOptions=(id,extra={})=>({...coreOptions,...extra,onDevicesChanged:hashes=>indexTokens(id,hashes),...(id==='owner'?{authorizeDelegatedDevice,delegatedDeviceExists,studioAccountExists}:{tenantVoiceStatus:()=>owner.kibiContext.voice.delegatedStatus(id)})});
+ owner=await createTenant(tenantOptions('owner'));tenants.set('owner',owner);indexTokens('owner',owner.kibiContext.tokenHashes());
  try{
   accounts=await openAccounts(dataDir);
   for(const user of accounts.list()){
@@ -104,7 +114,16 @@ export async function createIdentityServer(options,createTenant){
  };
  const readyTenant=async id=>{const t=tenants.get(id);return t?.creating?await t.creating:tenantOf(id);};
  const apiBase=new URL(cookiePath,publicOrigin).href;
+ let studioLinks;
+ try{studioLinks=await openStudioLinks(dataDir,{accountExists:studioAccountExists});}
+ catch(error){await Promise.all([...tenants.values()].map(t=>t.kibiContext.close()));throw error;}
  const pairings=createPairings({apiBase,issueDevice:async(ownerId,name)=>(await readyTenant(ownerId)).kibiContext.createDevice(name)});
+ const exactBody=(value,keys)=>Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
+ // Bearer calls are server-to-server. If a browser sends Origin, it must be ours;
+ // cookies never authenticate these routes. Tokens cannot authorize panel APIs.
+ const studioOrigin=req=>{if(req.headers.origin!==undefined)requireOrigin(req);};
+ const studioBearer=req=>{studioOrigin(req);const match=/^Bearer (kibi_studio_[A-Za-z0-9_-]{43})$/.exec(req.headers.authorization||'');if(!match)throw fail(401,'studio_unauthorized');return match[1];};
+ const studioProfile=(principal)=>({account:accounts.get(principal.accountId),connection:studioLinks.list(principal.accountId).find(c=>c.id===principal.connectionId),scopes:[...principal.scopes],voice:owner.kibiContext.voice.delegatedStatus(principal.accountId),voiceEligibility:owner.kibiContext.voice.studioVoiceEligibility(principal.accountId)});
  const server=createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');
   res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
@@ -117,7 +136,9 @@ export async function createIdentityServer(options,createTenant){
    if(method==='POST'&&(path==='/api/login'||path==='/api/register')){
     requireOrigin(req);rate(`login:${address}`,10);const body=await bodyOf(req);
     if(path==='/api/register'){
-     const user=await accounts.register(body.email,body.password);await readyTenant(user.id);return signIn(req,res,user,201);
+     const user=await accounts.register(body.email,body.password);await readyTenant(user.id);
+     let studioLink;try{studioLink=await studioLinks.issue(user.id);}catch{studioLink={code:null,error:'studio_link_unavailable'};}
+     return signIn(req,res,user,201,{studioLink});
     }
     let user=null;
     if(body.email!==undefined){user=await accounts.authenticate(body.email,body.password);}
@@ -130,6 +151,46 @@ export async function createIdentityServer(options,createTenant){
    }
    if(method==='POST'&&path==='/api/logout'){
     const s=authorize(req,true);sessions.delete(s.key);setCookie(res,'',0);return json(res,200,{ok:true});
+   }
+   if(path==='/api/studio/link-code'&&method==='POST'){
+    const s=authorize(req,true);if(s.user.role!=='user')throw fail(403,'studio_account_unavailable');
+    const body=await bodyOf(req);if(!exactBody(body,[]))throw fail(400,'invalid_input');
+    rate(`studio-issue:${s.user.id}`,10);return json(res,201,await studioLinks.issue(s.user.id));
+   }
+   if(path==='/api/studio/connections'&&method==='GET'){
+    const s=authorize(req);if(s.user.role!=='user')throw fail(403,'studio_account_unavailable');return json(res,200,{connections:studioLinks.list(s.user.id)});
+   }
+   if(path.startsWith('/api/studio/connections/')&&method==='DELETE'){
+    const s=authorize(req,true);if(s.user.role!=='user')throw fail(403,'studio_account_unavailable');
+    const id=path.slice('/api/studio/connections/'.length);
+    if(!await studioLinks.revoke(s.user.id,id))throw fail(404,'studio_connection_not_found');return json(res,200,{ok:true});
+   }
+   if(path==='/api/studio/redeem'&&method==='POST'){
+    studioOrigin(req);rate(`studio-redeem:${address}`,10);const body=await bodyOf(req);
+    if(!exactBody(body,['code','label']))throw fail(400,'invalid_studio_link');
+    const result=await studioLinks.redeem(body),principal=studioLinks.authenticate(result.token);
+    if(!principal)throw fail(401,'studio_unauthorized');
+    return json(res,201,{...result,account:accounts.get(principal.accountId),apiBase,scopes:[...STUDIO_SCOPES]});
+   }
+   if(path==='/api/studio/profile'&&method==='GET'){
+    const token=studioBearer(req);rate(`studio-profile:${address}`,240);
+    return json(res,200,await studioLinks.withAuthorization(token,'voice.status',principal=>studioProfile(principal)));
+   }
+   if(path==='/api/studio/devices'&&method==='GET'){
+    const token=studioBearer(req);rate(`studio-devices:${address}`,240);
+    return json(res,200,await studioLinks.withAuthorization(token,'devices.list',async principal=>({devices:(await readyTenant(principal.accountId)).kibiContext.listDevices()})));
+   }
+   if(path==='/api/studio/pairing/claim'&&method==='POST'){
+    const token=studioBearer(req),body=await bodyOf(req);if(!exactBody(body,['code']))throw fail(400,'invalid_input');
+    return json(res,200,await studioLinks.withAuthorization(token,'pairing.claim',principal=>{rate(`pair-claim:${principal.accountId}`,20);return pairings.claim(principal.accountId,body.code);}));
+   }
+   if(path==='/api/studio/voice/activate'&&method==='POST'){
+    const token=studioBearer(req),body=await bodyOf(req);if(!exactBody(body,['deviceId']))throw fail(400,'invalid_input');
+    rate(`studio-voice:${address}`,30);
+    return json(res,200,await studioLinks.withAuthorization(token,'voice.activate',async principal=>({ok:true,voice:await owner.kibiContext.voice.activateStudioDevice({accountId:principal.accountId,deviceId:body.deviceId},{isAuthorized:()=>!principal.signal.aborted&&!closed})})));
+   }
+   if(path==='/api/studio/session'&&method==='DELETE'){
+    const token=studioBearer(req);if(!await studioLinks.disconnect(token))throw fail(401,'studio_unauthorized');return json(res,200,{ok:true});
    }
    if(method==='GET'&&path==='/api/sdk')return json(res,200,{version:'1.0',deviceContract:'1.0',supportRelease:'2026-11-09-r1',validation:true,execution:false,links:{instructions:'docs/LOCAL_STUDIO.md',sdk:'docs/SDK.md',hardware:'docs/HARDWARE.md',services:'docs/SERVICES.md',update:'docs/SDK_UPDATE.md',deviceContract:'sdk/device/contract.json',supportRelease:'sdk/device/release.json',client:'sdk/index.mjs',schema:'sdk/kibiplugin.schema.json',example:'examples/server-plugin/local-notification.kibiplugin'}});
    if(method==='POST'&&path==='/api/sdk/validate'){
@@ -145,6 +206,35 @@ export async function createIdentityServer(options,createTenant){
    if(method==='POST'&&path==='/api/pairing/claim'){
     const s=authorize(req,true);rate(`pair-claim:${s.user.id}`,20);const body=await bodyOf(req);
     return json(res,200,await pairings.claim(s.user.id,body.code));
+   }
+   if(path==='/api/settings/voice/studio-account'&&['POST','DELETE'].includes(method)){
+    const s=authorize(req,true);if(s.user.id!=='owner'||s.user.role!=='owner')throw fail(403,'owner_required');bound.set(req,s);
+    let accountId=null;
+    if(method==='POST'){
+     const body=await bodyOf(req);
+     if(Object.keys(body).length!==1||typeof body.email!=='string'||body.email.length>254)throw fail(400,'invalid_studio_voice_account');
+     const user=accounts.list().find(value=>value.email===body.email.trim().toLowerCase());
+     if(!user)throw fail(400,'invalid_studio_voice_account');accountId=user.id;
+    }
+    if(resolver(req)!==s)throw fail(401,'unauthorized');
+    return json(res,200,{ok:true,voice:await owner.kibiContext.voice.allowStudioAccount(accountId,{isAuthorized:()=>resolver(req)===s})});
+   }
+   if(path==='/api/settings/voice/delegation'&&['POST','DELETE'].includes(method)){
+    const s=authorize(req,true);if(s.user.id!=='owner'||s.user.role!=='owner')throw fail(403,'owner_required');
+    bound.set(req,s);
+    let grant=null;
+    if(method==='POST'){
+     const body=await bodyOf(req);
+     if(Object.keys(body).length!==2||typeof body.email!=='string'||body.email.length>254||typeof body.deviceId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(body.deviceId))throw fail(400,'invalid_voice_delegation');
+     const user=accounts.list().find(value=>value.email===body.email.trim().toLowerCase());
+     if(!user)throw fail(400,'invalid_voice_delegation');
+     const tenant=await readyTenant(user.id);
+     if(!tenant.kibiContext.hasDevice(body.deviceId))throw fail(400,'invalid_voice_delegation');
+     grant={accountId:user.id,deviceId:body.deviceId};
+    }
+    // A body or tenant creation may have awaited while the owner logged out.
+    if(resolver(req)!==s)throw fail(401,'unauthorized');
+    return json(res,200,{ok:true,voice:await owner.kibiContext.voice.setDelegation(grant,{isAuthorized:()=>resolver(req)===s})});
    }
    const asset=PUBLIC.get(path);
    if(asset&&['GET','HEAD'].includes(method)){
@@ -168,7 +258,7 @@ export async function createIdentityServer(options,createTenant){
  const closeHttp=server.close.bind(server);
  server.close=callback=>{
   closed=true;pairings.clear();sessions.clear();
-  const closing=Promise.allSettled([...tenants.values()].map(async t=>(t.creating?await t.creating:t).kibiContext.close()));
+  const closing=Promise.allSettled([studioLinks.close(),...[...tenants.values()].map(async t=>(t.creating?await t.creating:t).kibiContext.close())]);
   closeHttp(error=>{closing.then(results=>callback?.(error|| (results.some(r=>r.status==='rejected')?new Error('voice_close_failed'):undefined)));});return server;
  };
  return server;

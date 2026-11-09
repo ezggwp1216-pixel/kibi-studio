@@ -2,7 +2,7 @@
 
 const $ = (id) => document.getElementById(id);
 const API_BASE = new URL('.', import.meta.url);
-const state = { authenticated: false, user: null, authMode: 'login', generation: 0, csrf: '', overview: null, settings: null, loadedSettings: false, refreshing: false, timer: null, section: 'overview', messageTarget: null, confirmAction: null, refreshFailed: false, instructions: '', instructionsLoading: false };
+const state = { authenticated: false, user: null, authMode: 'login', generation: 0, csrf: '', overview: null, settings: null, loadedSettings: false, refreshing: false, timer: null, section: 'overview', messageTarget: null, confirmAction: null, refreshFailed: false, instructions: '', instructionsLoading: false, voiceDelegationPending: '', voiceStudioAccountPending: '', studioDialogVersion: 0, studioConnectionsVersion: 0, studioPending: '' };
 const labels = { overview: 'Обзор', devices: 'Устройства', modules: 'Модули', guide: 'Инструкция' };
 const errorMessages = {
   origin_forbidden: 'Адрес панели не совпадает с KIBI_PUBLIC_ORIGIN. Откройте настроенный адрес сервера.',
@@ -25,6 +25,13 @@ const errorMessages = {
   pairing_claimed: 'Этот код уже подтверждён. Проверьте список устройств или получите новый код на Киби.',
   pairing_limit: 'Слишком много попыток привязки. Подождите немного и повторите.',
   tenant_voice_unavailable: 'Голос для личных кабинетов пока недоступен. API устройства и текстовый ИИ настраиваются отдельно.',
+  invalid_voice_delegation: 'Проверьте почту существующего кабинета и ID Киби, привязанной именно к нему. Доступ не изменён.',
+  invalid_studio_voice_account: 'Укажите почту существующего личного кабинета. Разрешение не изменено.',
+  studio_link_unavailable: 'Кабинет создан, но код подключения Studio сейчас недоступен. Попробуйте получить код позже.',
+  studio_voice_not_approved: 'Владелец сервера ещё не разрешил этому кабинету включать голос из Studio.',
+  studio_voice_xiaozhi_required: 'Для подключения из Studio владелец должен выбрать Xiaozhi.',
+  owner_required: 'Выдать или отозвать голосовой доступ может только владелец сервера.',
+  voice_closed: 'Голосовой шлюз остановлен. Обновите состояние перед повтором.',
   unauthorized: 'Сессия завершилась. Войдите снова.',
   authentication_required: 'Сессия завершилась. Войдите снова.',
   invalid_origin: 'Адрес панели не совпадает с KIBI_PUBLIC_ORIGIN сервера. Откройте настроенный адрес или проверьте установку.',
@@ -85,7 +92,7 @@ function announce(text, isError = false, retry = false) { $('global-message').hi
 function node(tag, className, text) { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; }
 function action(text, className, callback) { const el = node('button', className, text); el.type = 'button'; el.addEventListener('click', callback); return el; }
 function openDialog(id) { $(id).showModal(); }
-function closeDialog(id) { $(id).close(); }
+function closeDialog(id) { if (id === 'studio-dialog') clearStudioDialog(); $(id).close(); }
 async function pending(button, task) { if (button.disabled) return; const dialog = button.closest('dialog'); if (dialog) dialog.dataset.pending = 'true'; const before = button.textContent; button.disabled = true; button.textContent = 'Выполняем…'; button.setAttribute('aria-busy', 'true'); try { return await task(); } finally { button.disabled = button.dataset.ownerOnlyDisabled === 'true'; button.textContent = before; button.removeAttribute('aria-busy'); if (dialog) delete dialog.dataset.pending; } }
 function setSection(id, { focus = true, updateHash = true } = {}) {
   if (!labels[id]) id = 'overview'; state.section = id;
@@ -110,13 +117,17 @@ function setAuthMode(mode) {
   feedback('login-error', ''); $('auth-email').removeAttribute('aria-invalid'); $('admin-password').removeAttribute('aria-invalid');
 }
 function clearAccountUI() {
-  state.generation += 1; state.authenticated = false; state.user = null; state.csrf = ''; state.settings = null; state.overview = null; state.loadedSettings = false; state.refreshing = false; state.refreshFailed = false; state.messageTarget = null; state.confirmAction = null;
+  state.generation += 1; state.authenticated = false; state.user = null; state.csrf = ''; state.settings = null; state.overview = null; state.loadedSettings = false; state.refreshing = false; state.refreshFailed = false; state.messageTarget = null; state.confirmAction = null; state.voiceDelegationPending = ''; state.voiceStudioAccountPending = '';
+  clearStudioDialog(); $('studio-connect').hidden = true;
   clearInterval(state.timer); state.timer = null;
   for (const dialog of document.querySelectorAll('dialog')) { if (dialog.open) dialog.close(); delete dialog.dataset.pending; }
   for (const form of document.querySelectorAll('form')) { form.reset(); delete form.dataset.dirty; }
   for (const el of document.querySelectorAll('.form-feedback')) el.textContent = '';
   for (const id of ['device-token', 'ai-key', 'ai-prompt', 'telegram-token', 'telegram-chat', 'admin-password', 'auth-email', 'message-title', 'message-body', 'sdk-package']) $(id).value = '';
-  for (const id of ['ai-output', 'xiaozhi-pairing', 'xiaozhi-status', 'voice-endpoint', 'voice-feedback', 'xiaozhi-feedback', 'account-email', 'account-role', 'topbar-account', 'message-dialog-title', 'message-explanation', 'confirm-title', 'confirm-description', 'global-message-text']) $(id).textContent = '';
+  for (const id of ['ai-output', 'xiaozhi-pairing', 'xiaozhi-status', 'voice-endpoint', 'voice-delegated-device', 'voice-feedback', 'xiaozhi-feedback', 'voice-delegation-status', 'voice-delegation-feedback', 'account-email', 'account-role', 'topbar-account', 'message-dialog-title', 'message-explanation', 'confirm-title', 'confirm-description', 'global-message-text']) $(id).textContent = '';
+  $('voice-delegated-device').hidden = true;
+  for (const id of ['voice-studio-eligibility', 'voice-studio-account-status', 'voice-studio-account-feedback']) $(id).textContent = '';
+  $('voice-studio-eligibility').hidden = true;
   for (const id of ['device-list', 'event-list', 'module-summary-list', 'sdk-errors']) $(id).replaceChildren();
   for (const id of ['device-list', 'event-list']) $(id).setAttribute('aria-busy', 'true');
   for (const id of ['ai-status', 'telegram-status', 'voice-status', 'notifications-status']) { $(id).textContent = 'Загружаем'; $(id).className = 'status-label neutral'; }
@@ -129,6 +140,20 @@ function setVoicePermissions(owner) {
   $('voice-owner-controls').hidden = !owner;
   for (const control of $('voice-owner-controls').querySelectorAll('input, select, button')) { control.disabled = !owner; control.dataset.ownerOnlyDisabled = String(!owner); }
   $('voice-intro').textContent = owner ? 'Живой разговор через ваш сервер: Xiaozhi или OpenAI. Одновременно работает один разговор. Провайдер выбирается явно.' : 'Голос для личных кабинетов пока недоступен. Уведомления, API устройства и текстовый ИИ настраиваются отдельно.';
+  syncVoiceDelegationControls();
+  syncVoiceStudioAccountControls();
+}
+function syncVoiceDelegationControls() {
+  const owner = state.authenticated && state.user?.role === 'owner';
+  for (const control of $('voice-delegation-form').querySelectorAll('input, button')) {
+    control.disabled = !owner || !state.settings?.voice || !!state.voiceDelegationPending || !!state.voiceStudioAccountPending || (control.id === 'voice-delegation-revoke' && !state.settings.voice.delegation);
+    control.dataset.ownerOnlyDisabled = String(!owner);
+    if (control.tagName === 'BUTTON') {
+      const busy = state.voiceDelegationPending === control.id;
+      control.textContent = busy ? 'Выполняем…' : control.id === 'voice-delegation-grant' ? 'Выдать доступ' : 'Отозвать доступ';
+      if (busy) control.setAttribute('aria-busy', 'true'); else control.removeAttribute('aria-busy');
+    }
+  }
 }
 function showLogin(message = '') {
   const mode = state.user?.role === 'owner' ? 'owner' : state.authMode === 'owner' ? 'owner' : 'login';
@@ -137,18 +162,94 @@ function showLogin(message = '') {
   setAuthMode(mode); feedback('login-error', message, !!message);
   if (message) $('admin-password').focus();
 }
-async function enterApp(data) {
+async function enterApp(data, { registration = false } = {}) {
   clearAccountUI();
   state.authenticated = true; state.csrf = data.csrfToken; state.user = data.user || { id: null, email: null, role: 'user' };
   const owner = state.user.role === 'owner'; setVoicePermissions(owner);
+  const generation = state.generation; $('studio-connect').hidden = state.user.role !== 'user';
   $('account-role').textContent = owner ? 'Владелец сервера' : 'Личный кабинет'; $('account-email').textContent = state.user.email || ''; $('topbar-account').textContent = state.user.email || 'Владелец сервера';
   $('login-screen').hidden = true; $('app').hidden = false; feedback('login-error', '');
   setSection(location.hash.slice(1), { focus: false });
   loadStudioInstructions(); loadSdkStatus();
   await refreshData();
-  if (state.authenticated) { clearInterval(state.timer); state.timer = setInterval(() => { if (!document.hidden && state.authenticated) refreshData(true); }, 15000); }
+  if (generation !== state.generation) return;
+  if (state.authenticated) { clearInterval(state.timer); state.timer = setInterval(() => { if (!document.hidden && state.authenticated) refreshData(true); }, 15000); if (registration && !owner && data.studioLink) openStudioDialog(data.studioLink); }
 }
 function formatDate(value, short = false) { if (!value) return 'Ещё не выходило на связь'; const date = new Date(value); if (!Number.isFinite(date.getTime())) return 'Время неизвестно'; return new Intl.DateTimeFormat('ru-RU', short ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } : { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date); }
+function studioCurrent(generation, version) { return state.authenticated && state.user?.role === 'user' && generation === state.generation && version === state.studioDialogVersion && $('studio-dialog').open; }
+function clearStudioCode() { $('studio-link-code').value = ''; $('studio-link-expiry').textContent = ''; $('studio-code-panel').hidden = true; }
+function clearStudioDialog() {
+  state.studioDialogVersion += 1; state.studioConnectionsVersion += 1; state.studioPending = '';
+  clearStudioCode(); feedback('studio-link-feedback', ''); feedback('studio-connections-feedback', ''); $('studio-connections').replaceChildren(); $('studio-connections').setAttribute('aria-busy', 'false'); syncStudioControls();
+}
+function syncStudioControls() {
+  const disabled = !state.authenticated || state.user?.role !== 'user' || !!state.studioPending;
+  $('studio-issue').disabled = disabled; $('studio-connections-refresh').disabled = disabled;
+  $('studio-issue').textContent = state.studioPending === 'issue' ? 'Получаем код…' : 'Получить новый код';
+  if (state.studioPending === 'issue') $('studio-issue').setAttribute('aria-busy', 'true'); else $('studio-issue').removeAttribute('aria-busy');
+  for (const button of $('studio-connections').querySelectorAll('button')) button.disabled = disabled;
+}
+function displayStudioLink(link) {
+  clearStudioCode();
+  if (typeof link?.code !== 'string' || !link.code || link.code.length > 256 || !Number.isFinite(Date.parse(link.expiresAt))) { feedback('studio-link-feedback', errorMessages.studio_link_unavailable, true); return; }
+  $('studio-link-code').value = link.code; $('studio-link-expiry').textContent = `Действует до ${formatDate(link.expiresAt, true)}. После закрытия окна код будет скрыт.`; $('studio-code-panel').hidden = false; feedback('studio-link-feedback', 'Введите этот код в своей локальной Studio.');
+}
+function openStudioDialog(link) {
+  if (!state.authenticated || state.user?.role !== 'user') return;
+  clearStudioDialog(); if (!$('studio-dialog').open) openDialog('studio-dialog');
+  if (link) displayStudioLink(link);
+  (typeof link?.code === 'string' ? $('studio-link-code') : $('studio-issue')).focus();
+  void loadStudioConnections();
+}
+async function issueStudioLink() {
+  const generation = state.generation, version = state.studioDialogVersion;
+  if (!studioCurrent(generation, version) || state.studioPending) return;
+  state.studioPending = 'issue'; clearStudioCode(); syncStudioControls(); feedback('studio-link-feedback', 'Получаем одноразовый код…');
+  try { const link = await api('/api/studio/link-code', { method: 'POST', body: {} }); if (!studioCurrent(generation, version)) return; displayStudioLink(link); if (!$('studio-code-panel').hidden) { $('studio-link-code').focus(); $('studio-link-code').select(); } }
+  catch (error) { if (error.code !== 'session_changed' && studioCurrent(generation, version)) feedback('studio-link-feedback', error.message, true); }
+  finally { if (studioCurrent(generation, version)) { state.studioPending = ''; syncStudioControls(); } }
+}
+async function loadStudioConnections() {
+  const generation = state.generation, version = state.studioDialogVersion, request = ++state.studioConnectionsVersion;
+  if (!studioCurrent(generation, version)) return;
+  $('studio-connections').setAttribute('aria-busy', 'true'); feedback('studio-connections-feedback', 'Получаем подключения…');
+  try {
+    const result = await api('/api/studio/connections'); if (!studioCurrent(generation, version) || request !== state.studioConnectionsVersion) return;
+    $('studio-connections').replaceChildren();
+    for (const connection of Array.isArray(result.connections) ? result.connections : []) {
+      if (typeof connection.id !== 'string') continue;
+      const row = node('article', 'device-row'), info = node('div', 'device-info'); info.append(node('div', '', `Studio · ${connection.id}`));
+      if (connection.createdAt) info.append(node('span', 'field-note', `Подключена ${formatDate(connection.createdAt, true)}`));
+      row.append(info, action('Отключить Studio', 'text-button danger', () => revokeStudioConnection(connection.id))); $('studio-connections').append(row);
+    }
+    feedback('studio-connections-feedback', $('studio-connections').children.length ? 'Отключение отзовёт доступ выбранной Studio к кабинету.' : 'Подключённых Studio пока нет.'); syncStudioControls();
+  } catch (error) { if (error.code !== 'session_changed' && studioCurrent(generation, version) && request === state.studioConnectionsVersion) feedback('studio-connections-feedback', error.message, true); }
+  finally { if (studioCurrent(generation, version) && request === state.studioConnectionsVersion) $('studio-connections').setAttribute('aria-busy', 'false'); }
+}
+async function revokeStudioConnection(id) {
+  const generation = state.generation, version = state.studioDialogVersion;
+  if (!studioCurrent(generation, version) || state.studioPending) return;
+  state.studioPending = 'revoke'; state.studioConnectionsVersion += 1; syncStudioControls();
+  try { await api(`/api/studio/connections/${encodeURIComponent(id)}`, { method: 'DELETE' }); if (studioCurrent(generation, version)) await loadStudioConnections(); }
+  catch (error) { if (error.code !== 'session_changed' && studioCurrent(generation, version)) feedback('studio-connections-feedback', error.message, true); }
+  finally { if (studioCurrent(generation, version)) { state.studioPending = ''; syncStudioControls(); } }
+}
+function syncVoiceStudioAccountControls() {
+  const owner = state.authenticated && state.user?.role === 'owner';
+  for (const control of $('voice-studio-account-form').querySelectorAll('input, button')) {
+    control.disabled = !owner || !state.settings?.voice || !!state.voiceStudioAccountPending || !!state.voiceDelegationPending || (control.id === 'voice-studio-account-revoke' && !state.settings.voice.studioAccountId); control.dataset.ownerOnlyDisabled = String(!owner);
+    if (control.tagName === 'BUTTON') { const busy = state.voiceStudioAccountPending === control.id; control.textContent = busy ? 'Выполняем…' : control.id === 'voice-studio-account-approve' ? 'Разрешить Studio' : 'Отозвать разрешение'; if (busy) control.setAttribute('aria-busy', 'true'); else control.removeAttribute('aria-busy'); }
+  }
+}
+async function changeStudioAccount(button, email) {
+  if (state.user?.role !== 'owner' || state.voiceStudioAccountPending || state.voiceDelegationPending || !state.settings?.voice) return;
+  const generation = state.generation; state.voiceStudioAccountPending = button.id;
+  try { await pending(button, async () => {
+    syncVoiceStudioAccountControls(); syncVoiceDelegationControls(); feedback('voice-studio-account-feedback', 'Сохраняем разрешение…');
+    try { const result = await api('/api/settings/voice/studio-account', { method: email === null ? 'DELETE' : 'POST', ...(email === null ? {} : { body: { email } }) }); if (generation !== state.generation || state.user?.role !== 'owner' || !state.settings) return; state.settings.voice = result.voice; $('voice-studio-account-form').reset(); renderSettings(); feedback('voice-studio-account-feedback', email === null ? 'Разрешение отозвано. Доступ, выданный через него, завершён.' : 'Разрешение сохранено. Кабинет сможет выбрать свою Киби через Studio после настройки Xiaozhi.'); }
+    catch (error) { if (error.code !== 'session_changed' && generation === state.generation) feedback('voice-studio-account-feedback', error.message, true); }
+  }); } finally { if (generation === state.generation) state.voiceStudioAccountPending = ''; syncVoiceStudioAccountControls(); syncVoiceDelegationControls(); }
+}
 function duration(seconds) { seconds = Math.max(0, Math.floor(Number(seconds) || 0)); const days = Math.floor(seconds / 86400); const hours = Math.floor(seconds / 3600) % 24; const minutes = Math.floor(seconds / 60) % 60; if (days) return `${days} д ${hours} ч`; if (hours) return `${hours} ч ${minutes} м`; return `${minutes} мин`; }
 function empty(title, text, buttonText, callback) { const el = node('div', 'empty-state'); el.append(node('span', 'empty-glyph', '↳'), node('h3', '', title), node('p', '', text)); el.firstChild.setAttribute('aria-hidden', 'true'); if (buttonText) el.append(action(buttonText, 'text-button', callback)); return el; }
 function renderOverview() {
@@ -173,12 +274,32 @@ function renderDevices(devices) {
 function renderModuleSummary(modules) {
   const notifications = modules.find((module) => module.id === 'notifications'); $('notifications-status').textContent = notifications?.status === 'ready' ? 'Работает' : 'Недоступен'; $('notifications-status').className = `status-label${notifications?.status === 'ready' ? '' : ' neutral'}`;
   const container = $('module-summary-list'); container.replaceChildren();
-  for (const module of modules) { const row = node('div', 'summary-row'); const names = { notifications: 'Уведомления', telegram: 'Telegram', ai: 'Текстовый ИИ', voice: 'Голосовой ИИ', schedules: 'Расписания' }; let status = module.status === 'ready' ? 'Работает' : module.status === 'configured' ? 'Настроен' : module.status === 'planned' ? 'В планах' : 'Не настроен'; let ready = module.status === 'ready'; const setting = state.settings?.[module.id]; if (setting) { status = setting.configured ? (setting.enabled ? 'Включён' : 'Выключен') : 'Не настроен'; ready = setting.configured && setting.enabled; } if (module.id === 'voice') { const voice = setting || module; status = voiceLabel(voice); ready = voice.status === 'active' || voice.status === 'listening'; } row.append(node('span', '', names[module.id] || module.name), node('span', `summary-state${ready ? ' ready' : ''}`, status)); container.append(row); }
+  for (const module of modules) { const row = node('div', 'summary-row'); const names = { notifications: 'Уведомления', telegram: 'Telegram', ai: 'Текстовый ИИ', voice: 'Голосовой ИИ', schedules: 'Расписания' }; let status = module.status === 'ready' ? 'Работает' : module.status === 'configured' ? 'Настроен' : module.status === 'planned' ? 'В планах' : 'Не настроен'; let ready = module.status === 'ready'; const setting = state.settings?.[module.id]; if (setting) { status = setting.configured ? (setting.enabled ? 'Включён' : 'Выключен') : 'Не настроен'; ready = setting.configured && setting.enabled; } if (module.id === 'voice') { const voice = setting || module; status = voiceLabel(voice); ready = (state.user?.role === 'owner' || voice.delegated === true) && ['active','listening'].includes(voice.status); } row.append(node('span', '', names[module.id] || module.name), node('span', `summary-state${ready ? ' ready' : ''}`, status)); container.append(row); }
 }
-function voiceLabel(voice) { if (state.user?.role !== 'owner' || voice.code === 'tenant_voice_unavailable') return 'Пока недоступен'; return ({disabled:'Выключен',not_configured:'Нужна настройка',listening:'Ожидает Киби',connecting:'Подключается',active:'Разговор идёт',error:'Нужна настройка',closed:'Остановлен'})[voice.status] || 'Недоступен'; }
+function voiceLabel(voice) { if (!voice || (state.user?.role !== 'owner' && voice.delegated !== true) || voice.code === 'tenant_voice_unavailable') return 'Пока недоступен'; return ({disabled:'Выключен',not_configured:'Нужна настройка',listening:'Ожидает Киби',connecting:'Подключается',active:'Разговор идёт',error:'Нужна настройка',closed:'Остановлен'})[voice.status] || 'Недоступен'; }
 function renderVoice(voice) {
-  if (state.user?.role !== 'owner' || voice?.code === 'tenant_voice_unavailable') {
-    setVoicePermissions(false); $('voice-status').textContent = 'Пока недоступен'; $('voice-status').className = 'status-label neutral'; $('voice-detail').textContent = 'Голос для личных кабинетов ещё не реализован. Это ограничение текущей версии; настройки голосового пилота владельца здесь недоступны.'; $('voice-endpoint').textContent = ''; $('xiaozhi-pairing').textContent = ''; return;
+  $('voice-delegated-device').hidden = true; $('voice-delegated-device').textContent = '';
+  $('voice-studio-eligibility').hidden = true; $('voice-studio-eligibility').textContent = '';
+  if (state.user?.role !== 'owner') {
+    setVoicePermissions(false);
+    for (const id of ['xiaozhi-pairing', 'xiaozhi-status', 'xiaozhi-feedback', 'voice-feedback', 'voice-delegation-status', 'voice-delegation-feedback']) $(id).textContent = '';
+    $('voice-form').reset(); delete $('voice-form').dataset.dirty; $('voice-delegation-form').reset();
+    $('voice-studio-account-form').reset(); $('voice-studio-account-status').textContent = ''; feedback('voice-studio-account-feedback', '');
+    const eligibility = voice?.studioVoice;
+    if (eligibility) { $('voice-studio-eligibility').hidden = false; $('voice-studio-eligibility').textContent = eligibility.approved ? eligibility.canActivate ? 'Самостоятельное подключение голоса из Studio разрешено. Studio может выбрать одну Киби, привязанную к вашему кабинету.' : errorMessages[eligibility.code] || 'Кабинету разрешён голос из Studio, но владельцу нужно завершить настройку Xiaozhi.' : 'Самостоятельное подключение голоса из Studio пока не разрешено владельцем сервера.'; }
+    if (voice?.delegated !== true || voice.code === 'tenant_voice_unavailable') {
+      $('voice-status').textContent = eligibility?.approved ? eligibility.canActivate ? 'Выберите Киби в Studio' : 'Нужна настройка' : 'Пока недоступен'; $('voice-status').className = 'status-label neutral'; $('voice-detail').textContent = eligibility?.canActivate ? 'Подключите локальную Studio к кабинету и выберите в ней свою привязанную Киби. Голос ещё не включён для устройства.' : 'Голосовой доступ устройству пока не выдан. Настройка выполняется отдельно от текстового ИИ.'; $('voice-endpoint').textContent = ''; return;
+    }
+    $('voice-intro').textContent = 'Владелец сервера разрешил Xiaozhi одной Киби вашего кабинета. Настройками Xiaozhi управляет владелец; доступ может быть отозван.';
+    $('voice-status').textContent = voiceLabel(voice); $('voice-status').className = `status-label${['listening','active'].includes(voice.status) ? '' : ' neutral'}`;
+    const details = { disabled:'Голосовой шлюз выключен на сервере. Доступ выдан, но подключение сейчас недоступно.', not_configured:'Доступ выдан, но голосовой шлюз ещё не настроен. Обратитесь к владельцу сервера.', listening:'TLS-шлюз ожидает разрешённую Киби. Доступ к Xiaozhi и физический звук проверяются при разговоре.', connecting:'Разрешённая Киби устанавливает соединение с Xiaozhi. Дождитесь завершения подключения.', active:'Разрешённая Киби подключена к Xiaozhi. Микрофон и воспроизведение звука проверяются на устройстве.', error:'Голосовой шлюз сообщил об ошибке. Обратитесь к владельцу сервера.', closed:'Голосовой шлюз остановлен.' };
+    const codes = { tls_required:'На сервере ещё не настроен защищённый голосовой адрес. Обратитесь к владельцу.', tls_failed:'Защищённое голосовое соединение недоступно. Владельцу нужно проверить сертификат сервера.', gateway_unavailable:'Голосовой шлюз не запустился. Обратитесь к владельцу сервера.', delegated_xiaozhi_required:'Для выданного доступа владелец должен выбрать режим Xiaozhi.', delegated_device_unavailable:'Разрешённая Киби недоступна в вашем кабинете. Обратитесь к владельцу сервера.', invalid_voice_delegation:'Сервер не подтвердил выданный доступ. Обратитесь к владельцу.' };
+    $('voice-detail').textContent = codes[voice.code] || details[voice.status] || 'Состояние голосового подключения пока не подтверждено.';
+    const deviceId = voice.scope?.kind === 'panel' && typeof voice.scope.id === 'string' ? voice.scope.id : '';
+    const device = state.overview?.devices?.find(value => value.id === deviceId);
+    $('voice-delegated-device').hidden = false; $('voice-delegated-device').textContent = deviceId ? `Разрешённая Киби: ${device?.name ? `${device.name} · ` : ''}${deviceId}. Остальные устройства кабинета не получают этот доступ.` : 'Сервер не указал разрешённую Киби.';
+    $('voice-endpoint').textContent = typeof voice.endpoint === 'string' && voice.endpoint ? `Адрес устройства: ${voice.endpoint}` : '';
+    return;
   }
   if (!voice) return;
   setVoicePermissions(true);
@@ -193,6 +314,10 @@ function renderVoice(voice) {
   if(!$('voice-form').dataset.dirty){$('voice-provider').value=voice.provider||'openai';$('voice-scope-kind').value=voice.scope?.kind||'legacy';$('voice-scope-id').value=voice.scope?.id||'';}
   $('voice-provider').disabled=!!voice.providerLocked;
   $('voice-endpoint').textContent = voice.enabled ? `Адрес устройства: ${voice.endpoint}` : '';
+  $('voice-delegation-status').textContent = voice.delegation ? `Доступ выдан: кабинет ${voice.delegation.accountId} · Киби ${voice.delegation.deviceId}. Почта кабинета сервером не возвращается.` : 'Доступ личному кабинету не выдан.';
+  $('voice-studio-account-status').textContent = voice.studioAccountId ? `Самостоятельное подключение разрешено кабинету ${voice.studioAccountId}. Studio выбирает только его собственную привязанную Киби.` : 'Самостоятельное подключение голоса из Studio не разрешено ни одному кабинету.';
+  syncVoiceDelegationControls();
+  syncVoiceStudioAccountControls();
 }
 function renderSettings(fillForms = false) {
   if (!state.settings) return;
@@ -268,6 +393,11 @@ for (const id of ['telegram-form', 'ai-form']) $(id).addEventListener('input', (
 for (const button of document.querySelectorAll('[data-copy]')) button.addEventListener('click', () => copyText($(button.dataset.copy).textContent, button));
 window.addEventListener('hashchange', () => { if (state.authenticated) setSection(location.hash.slice(1), { updateHash: false }); });
 $('token-dialog').addEventListener('close', () => { $('device-token').value = ''; feedback('token-feedback', ''); });
+$('studio-dialog').addEventListener('close', clearStudioDialog);
+$('studio-dialog').addEventListener('cancel', clearStudioDialog);
+$('studio-connect').addEventListener('click', () => openStudioDialog());
+$('studio-issue').addEventListener('click', issueStudioLink);
+$('studio-connections-refresh').addEventListener('click', loadStudioConnections);
 $('confirm-dialog').addEventListener('close', () => { state.confirmAction = null; });
 $('copy-token').addEventListener('click', () => copyText($('device-token').value, $('copy-token'), 'token-feedback'));
 $('load-studio-prompt').addEventListener('click', loadStudioInstructions);
@@ -291,9 +421,9 @@ $('refresh').addEventListener('click', () => refreshData()); $('retry').addEvent
 $('login-form').addEventListener('submit', (event) => {
   event.preventDefault(); const mode = state.authMode; const email = $('auth-email').value.trim(); const password = $('admin-password').value;
   if (mode === 'register' && (password.length < 12 || password.length > 1024)) { feedback('login-error', errorMessages.invalid_registration, true); $('admin-password').setAttribute('aria-invalid', 'true'); $('admin-password').focus(); return; }
-  pending(event.submitter, async () => { feedback('login-error', ''); $('admin-password').removeAttribute('aria-invalid'); $('auth-email').removeAttribute('aria-invalid'); try { const data = await api(mode === 'register' ? '/api/register' : '/api/login', { method: 'POST', body: mode === 'owner' ? { password } : { email, password } }); await enterApp(data); if (state.authenticated) $('main').focus(); } catch (error) { if (error.code === 'session_changed') return; feedback('login-error', error.message, true); $('admin-password').setAttribute('aria-invalid', 'true'); if (mode !== 'owner') $('auth-email').setAttribute('aria-invalid', 'true'); $('admin-password').focus(); } });
+  pending(event.submitter, async () => { feedback('login-error', ''); $('admin-password').removeAttribute('aria-invalid'); $('auth-email').removeAttribute('aria-invalid'); try { const data = await api(mode === 'register' ? '/api/register' : '/api/login', { method: 'POST', body: mode === 'owner' ? { password } : { email, password } }); await enterApp(data, { registration: mode === 'register' }); if (state.authenticated && !$('studio-dialog').open) $('main').focus(); } catch (error) { if (error.code === 'session_changed') return; feedback('login-error', error.message, true); $('admin-password').setAttribute('aria-invalid', 'true'); if (mode !== 'owner') $('auth-email').setAttribute('aria-invalid', 'true'); $('admin-password').focus(); } });
 });
-$('logout').addEventListener('click', () => pending($('logout'), async () => { try { await api('/api/logout', { method: 'POST' }); showLogin(); (state.authMode === 'owner' ? $('admin-password') : $('auth-email')).focus(); } catch (error) { if (error.code === 'session_changed') return; if (state.authenticated) announce(error.message, true); } }));
+$('logout').addEventListener('click', () => pending($('logout'), async () => { if ($('studio-dialog').open) closeDialog('studio-dialog'); else clearStudioDialog(); try { await api('/api/logout', { method: 'POST' }); showLogin(); (state.authMode === 'owner' ? $('admin-password') : $('auth-email')).focus(); } catch (error) { if (error.code === 'session_changed') return; if (state.authenticated) announce(error.message, true); } }));
 $('device-form').addEventListener('submit', (event) => { event.preventDefault(); const name = $('device-name').value.trim(); if (!name) { feedback('device-feedback', 'Введите название устройства.', true); $('device-name').focus(); return; } pending(event.submitter, async () => { feedback('device-feedback', ''); try { const data = await api('/api/devices', { method: 'POST', body: { name } }); closeDialog('device-dialog'); $('device-form').reset(); $('device-token').value = data.token; openDialog('token-dialog'); $('copy-token').focus(); await refreshData(); } catch (error) { if (error.code === 'session_changed') return; feedback('device-feedback', error.message, true); } }); });
 $('message-form').addEventListener('submit', (event) => { event.preventDefault(); const title = $('message-title').value.trim(); if (!title) { feedback('message-feedback', 'Введите заголовок.', true); $('message-title').focus(); return; } const target = state.messageTarget; pending(event.submitter, async () => { feedback('message-feedback', ''); try { const data = await api(target === null ? '/api/events' : `/api/devices/${encodeURIComponent(target)}/messages`, { method: 'POST', body: { title, message: $('message-body').value } }); closeDialog('message-dialog'); $('message-form').reset(); if (target !== null) announce('Сообщение поставлено в очередь устройства. Подтверждение доставки пока не получено.'); else announce(data.event?.delivery === 'telegram_failed' ? 'Событие сохранено. Telegram не подтвердил доставку; проверьте настройки модуля.' : data.event?.delivery === 'telegram_sent' ? 'Событие сохранено и отправлено в Telegram.' : 'Событие сохранено на сервере.', data.event?.delivery === 'telegram_failed'); await refreshData(); } catch (error) { if (error.code === 'session_changed') return; feedback('message-feedback', error.message, true); } }); });
 $('confirm-action').addEventListener('click', () => pending($('confirm-action'), async () => { try { if (state.confirmAction) await state.confirmAction(); closeDialog('confirm-dialog'); } catch (error) { if (error.code === 'session_changed') return; feedback('confirm-feedback', error.message, true); } }));
@@ -316,6 +446,31 @@ setAuthMode('login');
 boot();
 
 function xiaozhiMessage(code){return ({xiaozhi_pending:'Добавьте устройство по коду в Xiaozhi и повторите проверку.',xiaozhi_challenge_expired:'Код истёк. Получите новый.',xiaozhi_not_configured:'Получите код для привязки.',xiaozhi_untrusted_endpoint:'Сервис вернул неподдерживаемый адрес.',xiaozhi_mqtt_unsupported:'Аккаунт выдал MQTT. Эта версия поддерживает WebSocket.',xiaozhi_timeout:'Xiaozhi не ответил вовремя. Повторите позже.',xiaozhi_busy:'Настройка уже выполняется.',xiaozhi_provider_failed:'Не удалось связаться с Xiaozhi. Повторите позже.'})[code]||'Привязка пока не завершена. Повторите настройку.';}
+async function changeVoiceDelegation(button, grant) {
+  if (state.user?.role !== 'owner' || state.voiceDelegationPending || state.voiceStudioAccountPending) return;
+  if (!state.settings?.voice) { feedback('voice-delegation-feedback', 'Настройки ещё не загружены. Обновите данные и повторите.', true); return; }
+  const generation = state.generation; state.voiceDelegationPending = button.id;
+  try {
+    await pending(button, async () => {
+      syncVoiceDelegationControls(); syncVoiceStudioAccountControls(); feedback('voice-delegation-feedback', grant ? 'Сохраняем доступ…' : 'Отзываем доступ…');
+      try {
+        const result = await api('/api/settings/voice/delegation', { method: grant ? 'POST' : 'DELETE', ...(grant ? { body: grant } : {}) });
+        if (generation !== state.generation || state.user?.role !== 'owner' || !state.settings) return;
+        state.settings.voice = result.voice; $('voice-delegation-form').reset(); renderSettings();
+        feedback('voice-delegation-feedback', grant ? result.voice.provider !== 'xiaozhi' ? 'Доступ сохранён. Для разговора выберите Xiaozhi и завершите его настройку.' : 'Доступ сохранён для одной Киби. Состояние подключения показано выше; физический звук ещё нужно проверить.' : 'Доступ кабинета отозван. Восстановлен сохранённый доступ владельца; состояние шлюза показано выше.');
+      } catch (error) { if (error.code === 'session_changed') return; feedback('voice-delegation-feedback', error.message, true); }
+    });
+  } finally { if (generation === state.generation) state.voiceDelegationPending = ''; syncVoiceDelegationControls(); syncVoiceStudioAccountControls(); }
+}
+$('voice-delegation-form').addEventListener('submit', event => {
+  event.preventDefault(); if (state.user?.role !== 'owner' || state.voiceDelegationPending) return;
+  $('voice-delegation-email').value = $('voice-delegation-email').value.trim(); $('voice-delegation-device').value = $('voice-delegation-device').value.trim();
+  if (!$('voice-delegation-form').reportValidity()) return;
+  changeVoiceDelegation(event.submitter || $('voice-delegation-grant'), { email: $('voice-delegation-email').value, deviceId: $('voice-delegation-device').value });
+});
+$('voice-delegation-revoke').addEventListener('click', event => changeVoiceDelegation(event.currentTarget, null));
+$('voice-studio-account-form').addEventListener('submit', event => { event.preventDefault(); if (state.user?.role !== 'owner' || state.voiceStudioAccountPending || state.voiceDelegationPending) return; $('voice-studio-account-email').value = $('voice-studio-account-email').value.trim(); if (!$('voice-studio-account-form').reportValidity()) return; return changeStudioAccount(event.submitter || $('voice-studio-account-approve'), $('voice-studio-account-email').value); });
+$('voice-studio-account-revoke').addEventListener('click', event => changeStudioAccount(event.currentTarget, null));
 $('voice-form').addEventListener('input',()=>{$('voice-form').dataset.dirty='1';});
 $('voice-form').addEventListener('submit',event=>{event.preventDefault();if(state.user?.role!=='owner')return;pending(event.submitter,async()=>{try{const result=await api('/api/settings/voice',{method:'POST',body:{provider:$('voice-provider').value,scope:{kind:$('voice-scope-kind').value,id:$('voice-scope-id').value.trim()}}});state.settings.voice=result.voice;delete $('voice-form').dataset.dirty;renderVoice(result.voice);feedback('voice-feedback','Режим сохранён. Активный разговор завершён; следующий начнётся с выбранным провайдером.');}catch(error){if(error.code==='session_changed')return;feedback('voice-feedback',error.message,true);}});});
 for(const [id,operation] of [['xiaozhi-prepare','prepare'],['xiaozhi-activate','activate']])$(id).addEventListener('click',event=>{if(state.user?.role!=='owner')return;return pending(event.currentTarget,async()=>{try{const result=await api('/api/settings/xiaozhi/'+operation,{method:'POST',body:{}});state.settings.voice=result.voice;renderVoice(result.voice);feedback('xiaozhi-feedback',result.registration.configured?'Привязка подтверждена. Модель и голос выбираются в Xiaozhi.':'Добавьте устройство в Xiaozhi по коду выше, затем проверьте привязку.');}catch(error){if(error.code==='session_changed')return;feedback('xiaozhi-feedback',xiaozhiMessage(error.code),true);await refreshData();}});});

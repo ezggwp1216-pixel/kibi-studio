@@ -1,0 +1,354 @@
+{
+  "id": "leroyd-c309-public-b59a5c23",
+  "version": 1,
+  "sourceUrl": "https://leroyd.com/oled.ino.bin",
+  "sourceSha256": "b59a5c23ad622308efe727b325cc1449192f1f344ba00199462ee9e65e317162",
+  "sourceBytes": 1335984,
+  "geometry": {
+    "width": 128,
+    "height": 64,
+    "frameBytes": 1024,
+    "rowBytes": 16,
+    "format": "1bpp-row-major-msb-first",
+    "one": "white"
+  },
+  "evidence": {
+    "descriptorOffset": 133432,
+    "descriptorStride": 24,
+    "renderCallOffsets": [
+      358378,
+      358426
+    ],
+    "bitmapBlitterOffset": 362794
+  },
+  "frames": [
+    {
+      "offset": 138128,
+      "sha256": "7b664fae9a5e49e7cc4f44c9f575d00b6044bab4dca48f21c169d9521cc12270"
+    },
+    {
+      "offset": 139152,
+      "sha256": "b14032788e9c03932b493bf16d664ed90c75baeafa157257b0749744ff8fa345"
+    },
+    {
+      "offset": 140176,
+      "sha256": "b206da52d85c349c8a1bab9b4b225bfd729c524540f653ee229ea70e8d7a8d41"
+    },
+    {
+      "offset": 141200,
+      "sha256": "0c8a170b46618fbb482d834e065214b772bb55ac6f1e90c256eb51ec68ac0c74"
+    },
+    {
+      "offset": 150960,
+      "sha256": "04ba3939e0b9e73bff23e087969f9ce5c66a2e7ab51e8d6f6bbc9666eec03cee"
+    },
+    {
+      "offset": 151904,
+      "sha256": "d1f809f312cca6ebe3708de671f06294fc7fbd620f71b64b100f8d7f8404074c"
+    },
+    {
+      "offset": 152928,
+      "sha256": "e47acb0fafea0e1780060cbc4c505ea65ce5bd85b7196a2811e6903be1680c01"
+    },
+    {
+      "offset": 153904,
+      "sha256": "f9e738ee3662f511e4670fdb4faaec3a73df658e0eeb2b2ccb5197bb80a18a44"
+    },
+    {
+      "offset": 154848,
+      "sha256": "f1de934a9a5d4044c5c8bf20042f9464300ad5da36d2cabfc2234ec2d866c849"
+    },
+    {
+      "offset": 155856,
+      "sha256": "f348586a2149395cdd29365420db741d7343b35223f7aa056e842f73fd77fcc0"
+    },
+    {
+      "offset": 156864,
+      "sha256": "f348586a2149395cdd29365420db741d7343b35223f7aa056e842f73fd77fcc0"
+    },
+    {
+      "offset": 157872,
+      "sha256": "7eb915c739feb32ff90b1416f7c2197d6f2b324b9fa6be30ad4cd442de447506"
+    },
+    {
+      "offset": 158864,
+      "sha256": "c587ea65a9f9409eebf54c17e7b9f1b874eba9b5b36c178a2d7b619bc06fa547"
+    },
+    {
+      "offset": 159872,
+      "sha256": "9cf1aae29eae75c30424e89e3e9ea4a133291269eeb2a9be2089e08ec3d06b39"
+    },
+    {
+      "offset": 160896,
+      "sha256": "0f1044d5d4ae5c2c1174ff3a6857bc19eb17ca478e6f29b2d5a59dda51efc39f"
+    },
+    {
+      "offset": 161920,
+      "sha256": "97f91444720ee4164b56183a1ca43507fcbfe87898bb3c79a6d531196ec53e50"
+    },
+    {
+      "offset": 162912,
+      "sha256": "8cad4d3da9a6184f31e88250b61847ac4fdb70779aad32a76119cf6483b6cf8b"
+    },
+    {
+      "offset": 163936,
+      "sha256": "42f7e3354919ea5ca7c5039f5331a51dcecc2063b18f1d3076bade2c2d9e3b61"
+    },
+    {
+      "offset": 164912,
+      "sha256": "9f50d09abc7fd7311c511e04f8f3c1ce523b4a0e33990ba7a6ca38cae81f4c9c"
+    },
+    {
+      "offset": 165920,
+      "sha256": "0a2e2611a12993f8b59ba6529e86b4aba54b55066efc165353523e211a8ec25d"
+    },
+    {
+      "offset": 166928,
+      "sha256": "0353ca4e1dc2988dc06492f02a78bff1ffb21418cdac93189b38bf1eb30833a6"
+    },
+    {
+      "offset": 167952,
+      "sha256": "63085e13d918885a574a1e281cc4d901734cf7fb69f8d79114970175e8e0b484"
+    },
+    {
+      "offset": 168976,
+      "sha256": "8336e66be34737f5f0f817f74019a60719a36829cf2b9bc36e4947c78c6b3993"
+    },
+    {
+      "offset": 170000,
+      "sha256": "0c0e58a8318341c21fb9255c6134dab09e81b5368e6224b93c6c3153fad2118e"
+    },
+    {
+      "offset": 171024,
+      "sha256": "752a41e5790c98e3e5ee5018e8f26906191e7374d28c364fabdabbf87ffcd791"
+    },
+    {
+      "offset": 172048,
+      "sha256": "1d319f4d8a98f47fbac573194dd32fc91d22e47a8f3f6049b875e2a7b2fe2629"
+    },
+    {
+      "offset": 173072,
+      "sha256": "4e373adb1200fdd6e1801cec3d319f5a6465370868dbe638be8f26ec1141c008"
+    },
+    {
+      "offset": 174096,
+      "sha256": "7078558f02e28b50d177e4ad0c9e8f64ee7723bd18bf3b4878c012bbeb699410"
+    },
+    {
+      "offset": 175120,
+      "sha256": "244fc2eb23cba860f792f3f17d3f736d64dfe8959bb060e5b6007d11d2f2736e"
+    },
+    {
+      "offset": 176144,
+      "sha256": "f8705e7ddb3e47aa7302cdfb731b467cf9a0b9f5493c576e599f78edc689d44b"
+    },
+    {
+      "offset": 177168,
+      "sha256": "834919bce34a321451d803c70c86521ab1cce53ec3637af7f987fe7fd8e8ab95"
+    }
+  ],
+  "entries": [
+    {
+      "name": "neutral",
+      "order": [
+        177168,
+        176144,
+        175120,
+        174096,
+        175120,
+        177168
+      ],
+      "baseIntervalMs": 180,
+      "perFrameIntervalMs": null,
+      "semanticsKnown": true,
+      "loopEndFieldMs": 2000
+    },
+    {
+      "name": "serious",
+      "order": [
+        173072,
+        172048,
+        171024,
+        170000,
+        171024,
+        172048
+      ],
+      "baseIntervalMs": 180,
+      "perFrameIntervalMs": null,
+      "semanticsKnown": true,
+      "loopEndFieldMs": 0
+    },
+    {
+      "name": "sleepy",
+      "order": [
+        141200
+      ],
+      "baseIntervalMs": 250,
+      "perFrameIntervalMs": null,
+      "semanticsKnown": true,
+      "loopEndFieldMs": 0
+    },
+    {
+      "name": "crying",
+      "order": [
+        140176
+      ],
+      "baseIntervalMs": 250,
+      "perFrameIntervalMs": null,
+      "semanticsKnown": true,
+      "loopEndFieldMs": 0
+    },
+    {
+      "name": "sad",
+      "order": [
+        138128
+      ],
+      "baseIntervalMs": 250,
+      "perFrameIntervalMs": null,
+      "semanticsKnown": true,
+      "loopEndFieldMs": 0
+    },
+    {
+      "name": "cute",
+      "order": [
+        139152
+      ],
+      "baseIntervalMs": 250,
+      "perFrameIntervalMs": null,
+      "semanticsKnown": true,
+      "loopEndFieldMs": 0
+    },
+    {
+      "name": "kissou",
+      "order": [
+        163936
+      ],
+      "baseIntervalMs": 250,
+      "perFrameIntervalMs": null,
+      "semanticsKnown": true,
+      "loopEndFieldMs": 0
+    },
+    {
+      "name": "mini_love",
+      "order": [
+        162912,
+        161920
+      ],
+      "baseIntervalMs": 500,
+      "perFrameIntervalMs": null,
+      "semanticsKnown": true,
+      "loopEndFieldMs": 0
+    },
+    {
+      "name": "anime_love",
+      "order": [
+        167952,
+        166928,
+        165920,
+        164912,
+        164912,
+        165920,
+        166928,
+        167952
+      ],
+      "baseIntervalMs": 180,
+      "perFrameIntervalMs": null,
+      "semanticsKnown": true,
+      "loopEndFieldMs": 0
+    },
+    {
+      "name": "fire",
+      "order": [
+        160896,
+        159872,
+        158864
+      ],
+      "baseIntervalMs": 200,
+      "perFrameIntervalMs": null,
+      "semanticsKnown": true,
+      "loopEndFieldMs": 0
+    },
+    {
+      "name": "angry",
+      "order": [
+        157872,
+        156864,
+        155856
+      ],
+      "baseIntervalMs": 200,
+      "perFrameIntervalMs": null,
+      "semanticsKnown": true,
+      "loopEndFieldMs": 0
+    },
+    {
+      "name": "left",
+      "order": [
+        154848,
+        153904,
+        152928,
+        151904,
+        152928,
+        153904,
+        154848
+      ],
+      "baseIntervalMs": 200,
+      "perFrameIntervalMs": [
+        500,
+        200,
+        200,
+        500,
+        200,
+        200,
+        500
+      ],
+      "semanticsKnown": true,
+      "loopEndFieldMs": 0
+    },
+    {
+      "name": "love",
+      "order": [
+        168976
+      ],
+      "baseIntervalMs": 250,
+      "perFrameIntervalMs": null,
+      "semanticsKnown": true,
+      "loopEndFieldMs": 0
+    },
+    {
+      "name": "msg",
+      "order": [
+        150960
+      ],
+      "baseIntervalMs": 200,
+      "perFrameIntervalMs": null,
+      "semanticsKnown": false,
+      "loopEndFieldMs": 0
+    }
+  ],
+  "timing": {
+    "unit": "inferred-ms",
+    "effectivePlaybackReconstructed": false,
+    "neutral": {
+      "baseIntervalMs": 180,
+      "loopEndFieldMs": 2000,
+      "specialBranchValuesMs": [
+        60,
+        1000,
+        2000
+      ],
+      "note": "Mode/input dependent overrides are not reconstructed. Base intervals do not reproduce the complete original behavior."
+    }
+  },
+  "license": {
+    "status": "unknown",
+    "note": "Public binary availability does not establish permission to redistribute its artwork."
+  },
+  "completeness": {
+    "records": 14,
+    "positions": 42,
+    "sourceOffsets": 31,
+    "uniqueContents": 30,
+    "msg": "Face-like preview; original purpose unknown. Kept identifiable as msg, not asserted to be an advertised face.",
+    "allAdvertisedDesignsVerified": false
+  }
+}
