@@ -21,9 +21,12 @@ async function open(f){await f.adapter.receiveDevice(hello);await f.adapter.rece
 async function reply(f,packet,count=1){await f.event({type:'tts',state:'start'});for(let i=0;i<count;i++)await f.event(packet,true);await f.event({type:'tts',state:'stop'});}
 const stops=f=>f.device.filter(x=>x.payload.type==='tts'&&x.payload.state==='stop'&&!x.payload.flush);
 async function ack(f,stop=stops(f).at(-1).payload){await f.adapter.receiveDevice({type:'playback',response_id:stop.response_id,playback_id:stop.playback_id,audio_end_ms:stop.audio_end_ms});}
+const resolution=stop=>({type:'playback_resolution',state:'rejected',response_id:stop.response_id,playback_id:stop.playback_id});
+const listenStarts=f=>f.provider.filter(x=>x.payload.type==='listen'&&x.payload.state==='start').length;
+const inputPackets=f=>f.provider.filter(x=>Buffer.isBuffer(x.payload)).length;
 
 test('local hello, raw input and two turns retain exact local IDs and playback-based listening',async()=>{
- const f=fixture(),codec=createOpusCodec();try{await open(f);const greeting=f.device[0].payload;assert.equal(greeting.audio_params.sample_rate,16000);assert.deepEqual(greeting.features,{playback_ack:true,flush:true});assert.ok(greeting.session_id);assert.equal(f.provider[0].payload.mode,'auto');
+ const f=fixture(),codec=createOpusCodec();try{await open(f);const greeting=f.device[0].payload;assert.equal(greeting.audio_params.sample_rate,16000);assert.deepEqual(greeting.features,{playback_ack:true,flush:true,playback_resolution:true});assert.ok(greeting.session_id);assert.equal(f.provider[0].payload.mode,'auto');
  const packet=codec.encode(pcm(16000,960));await f.adapter.receiveDevice(packet,{binary:true});assert.deepEqual(f.provider.find(x=>Buffer.isBuffer(x.payload)).payload,packet);
  for(let i=1;i<=2;i++){await f.event({type:'stt',text:'речь'});await f.event({type:'llm',text:'ответ'});await reply(f,packet,2);await until(()=>stops(f).length===i);const stop=stops(f).at(-1).payload;assert.equal(stop.total_samples,1920);assert.equal(stop.audio_end_ms,120);assert.equal(stop.sample_rate,16000);assert.ok(!stop.response_id.startsWith('upstream'));await ack(f);}
  assert.notEqual(stops(f)[0].payload.response_id,stops(f)[1].payload.response_id);assert.equal(f.channels.length,1);assert.equal(f.adapter.snapshot().metrics.turnsCompleted,2);assert.ok(f.provider.filter(x=>x.payload.type==='listen').length>=3);assert.equal(f.device.filter(x=>x.payload.type==='stt').length,2);assert.equal(f.device.filter(x=>x.payload.type==='text').length,2);
@@ -79,6 +82,75 @@ test('response and device write deadlines close cleanly; closing cancels a stall
 
 test('validated in-flight microphone audio is dropped during playback, then accepted after exact ACK',async()=>{
  const f=fixture(),codec=createOpusCodec();try{await open(f);const packet=codec.encode(pcm(16000,960));await f.event({type:'tts',state:'start'});await f.adapter.receiveDevice(packet,{binary:true});assert.equal(f.provider.filter(x=>Buffer.isBuffer(x.payload)).length,0);await f.event(packet,true);await f.event({type:'tts',state:'stop'});await until(()=>stops(f).length);await f.adapter.receiveDevice(packet,{binary:true});assert.equal(f.provider.filter(x=>Buffer.isBuffer(x.payload)).length,0);await ack(f);await f.adapter.receiveDevice(packet,{binary:true});assert.equal(f.provider.filter(x=>Buffer.isBuffer(x.payload)).length,1);assert.equal(f.adapter.snapshot().metrics.droppedInputPackets,2);}finally{codec.close();await f.adapter.close();}
+});
+
+test('rejected playback resolution resumes a new microphone turn without claiming a full playback ACK',async()=>{
+ for(const partial of [null,0,30]){const f=fixture(),codec=createOpusCodec();try{
+  await open(f);assert.equal(f.device[0].payload.features.playback_resolution,true);const packet=codec.encode(pcm(16000,960));
+  await reply(f,packet);await until(()=>stops(f).length===1);const stop=stops(f)[0].payload;
+  if(partial!==null)await f.adapter.receiveDevice({type:'playback',response_id:stop.response_id,playback_id:stop.playback_id,audio_end_ms:partial});
+  await f.adapter.receiveDevice(packet,{binary:true});assert.equal(inputPackets(f),0);
+  await f.adapter.receiveDevice({...resolution(stop),session_id:f.device[0].payload.session_id});await until(()=>listenStarts(f)===2);
+  await f.adapter.receiveDevice(packet,{binary:true});assert.equal(inputPackets(f),1);assert.equal(f.channels.length,1);
+  // A fabricated full ACK would make this real zero/partial ACK go backwards.
+  await f.adapter.receiveDevice({type:'playback',response_id:stop.response_id,playback_id:stop.playback_id,audio_end_ms:partial??0});
+  assert.equal(f.adapter.snapshot().metrics.playbackRejections,1);assert.equal(f.adapter.snapshot().metrics.droppedInputPackets,1);
+  assert.deepEqual([...new Set(f.provider.filter(x=>!Buffer.isBuffer(x.payload)).map(x=>x.payload.type))],['listen']);
+  assert.equal(f.device.filter(x=>x.payload.type==='playback'||x.payload.type==='playback_resolution').length,0);
+  assert.equal(stop.audio_end_ms,60);assert.equal(stop.total_samples,960);
+  const safe=f.adapter.snapshot();assert.deepEqual(Object.keys(safe).sort(),['closed','code','kind','metrics']);assert.ok(Object.values(safe.metrics).every(Number.isSafeInteger));assert.ok(!JSON.stringify(safe).includes(stop.response_id));assert.ok(!JSON.stringify(safe).includes('acknowledgedMs'));
+  await reply(f,packet);await until(()=>stops(f).length===2);assert.notEqual(stops(f)[1].payload.response_id,stop.response_id);await ack(f);await until(()=>listenStarts(f)===3);
+ }finally{codec.close();await f.adapter.close();}}
+});
+
+test('bare microphone and repeated listen after STOP do not replace missing or partial ACK with terminal intent',async()=>{
+ for(const partial of [null,0,30]){const f=fixture(),codec=createOpusCodec();try{await open(f);const packet=codec.encode(pcm(16000,960));await reply(f,packet);await until(()=>stops(f).length===1);const stop=stops(f)[0].payload;
+  if(partial!==null)await f.adapter.receiveDevice({type:'playback',response_id:stop.response_id,playback_id:stop.playback_id,audio_end_ms:partial});
+  await f.adapter.receiveDevice(packet,{binary:true});await f.adapter.receiveDevice({type:'listen',state:'start',mode:'realtime'});await f.adapter.receiveDevice(packet,{binary:true});assert.equal(inputPackets(f),0);assert.equal(listenStarts(f),1);assert.equal(f.adapter.snapshot().metrics.droppedInputPackets,2);assert.equal(f.adapter.snapshot().closed,false);
+  await ack(f);await until(()=>listenStarts(f)===2);await f.adapter.receiveDevice(packet,{binary:true});assert.equal(inputPackets(f),1);
+ }finally{codec.close();await f.adapter.close();}}
+});
+
+test('rejected resolution waits for the in-flight STOP write and duplicate resolution resumes only once',async()=>{
+ let release,began;const blocked=new Promise(r=>{release=r;}),started=new Promise(r=>{began=r;});
+ const f=fixture({deviceSend:p=>{if(p.type==='tts'&&p.state==='stop'&&!p.flush){began();return blocked;}}}),codec=createOpusCodec();try{await open(f);const packet=codec.encode(pcm(16000,960));await reply(f,packet);await started;const stop=stops(f)[0].payload;
+  await f.adapter.receiveDevice(resolution(stop));await f.adapter.receiveDevice(resolution(stop));await f.adapter.receiveDevice(packet,{binary:true});assert.equal(listenStarts(f),1);assert.equal(inputPackets(f),0);assert.equal(f.adapter.snapshot().metrics.playbackRejections,1);
+  release();await until(()=>listenStarts(f)===2);await f.adapter.receiveDevice(resolution(stop));assert.equal(listenStarts(f),2);await f.adapter.receiveDevice(packet,{binary:true});assert.equal(inputPackets(f),1);
+ }finally{release();codec.close();await f.adapter.close();}
+});
+
+test('a retained duplicate rejection cannot resume or resolve a newer response',async()=>{
+ const f=fixture(),codec=createOpusCodec();try{await open(f);const packet=codec.encode(pcm(16000,960));await reply(f,packet);await until(()=>stops(f).length===1);const first=stops(f)[0].payload;await f.adapter.receiveDevice(resolution(first));await until(()=>listenStarts(f)===2);
+  await reply(f,packet);await until(()=>stops(f).length===2);const second=stops(f)[1].payload;await f.adapter.receiveDevice(resolution(first));await f.adapter.receiveDevice(packet,{binary:true});assert.equal(listenStarts(f),2);assert.equal(inputPackets(f),0);assert.equal(f.adapter.snapshot().metrics.playbackRejections,1);
+  await f.adapter.receiveDevice(resolution(second));await until(()=>listenStarts(f)===3);await f.adapter.receiveDevice(packet,{binary:true});assert.equal(inputPackets(f),1);assert.equal(f.adapter.snapshot().metrics.playbackRejections,2);
+ }finally{codec.close();await f.adapter.close();}
+});
+
+test('invalid rejected resolution shape or correlation is a fixed device protocol error',async()=>{
+ for(const bad of ['state','response','playback','session','duration','undefined-duration','missing-response','missing-playback']){const f=fixture(),codec=createOpusCodec();try{await open(f);await reply(f,codec.encode(pcm(16000,960)));await until(()=>stops(f).length===1);const stop=stops(f)[0].payload,message=resolution(stop);
+  if(bad==='state')message.state='completed';if(bad==='response')message.response_id='forged';if(bad==='playback')message.playback_id='forged';if(bad==='session')message.session_id='forged';if(bad==='duration')message.audio_end_ms=60;if(bad==='undefined-duration')message.audio_end_ms=undefined;if(bad==='missing-response')delete message.response_id;if(bad==='missing-playback')delete message.playback_id;
+  await assert.rejects(f.adapter.receiveDevice(message),{code:'device_protocol_invalid'});assert.equal(f.adapter.snapshot().code,'device_protocol_invalid');assert.equal(listenStarts(f),1);assert.equal(f.adapter.snapshot().metrics.playbackRejections,0);assert.deepEqual([...new Set(f.provider.map(x=>x.payload.type))],['listen']);
+ }finally{codec.close();await f.adapter.close();}}
+});
+
+test('rejected resolution before hello, during media or before STOP submission cannot unlock listening',async()=>{
+ const unopened=fixture();await assert.rejects(unopened.adapter.receiveDevice(resolution({response_id:'unknown',playback_id:'unknown'})),{code:'device_protocol_invalid'});assert.equal(unopened.channels.length,0);
+ for(const stopped of [false,true]){let release,began;const blocked=new Promise(r=>{release=r;}),started=new Promise(r=>{began=r;});const f=fixture({deviceSend:p=>{if(p.type==='tts'&&p.state==='start'){began();return blocked;}}}),codec=createOpusCodec();try{await open(f);const packet=codec.encode(pcm(16000,960));await f.event({type:'tts',state:'start'});await f.event(packet,true);await started;if(stopped)await f.event({type:'tts',state:'stop'});const start=f.device.find(x=>x.payload.type==='tts').payload;
+  await assert.rejects(f.adapter.receiveDevice(resolution(start)),{code:'device_protocol_invalid'});assert.equal(listenStarts(f),1);assert.equal(f.adapter.snapshot().metrics.playbackRejections,0);assert.equal(stops(f).length,0);
+ }finally{release();codec.close();await f.adapter.close();}}
+});
+
+test('first rejected resolution for an ACK-completed or interrupted response cannot resume another response',async()=>{
+ for(const completed of ['ack','abort']){const f=fixture(),codec=createOpusCodec();try{await open(f);const packet=codec.encode(pcm(16000,960));await reply(f,packet);await until(()=>stops(f).length===1);const old=stops(f)[0].payload;
+  if(completed==='ack'){await ack(f,old);await until(()=>listenStarts(f)===2);}else{await f.adapter.receiveDevice({type:'abort'});await f.adapter.receiveDevice({type:'listen',state:'start',mode:'realtime'});assert.equal(f.channels.length,2);}
+  await reply(f,packet);await until(()=>stops(f).length===2);await assert.rejects(f.adapter.receiveDevice(resolution(old)),{code:'device_protocol_invalid'});assert.equal(listenStarts(f),2);assert.equal(f.adapter.snapshot().metrics.playbackRejections,0);
+ }finally{codec.close();await f.adapter.close();}}
+});
+
+test('abort after rejected resolution while STOP write is in flight never resumes the retired response',async()=>{
+ let release,began;const blocked=new Promise(r=>{release=r;}),started=new Promise(r=>{began=r;});const f=fixture({deviceSend:p=>{if(p.type==='tts'&&p.state==='stop'&&!p.flush){began();return blocked;}}}),codec=createOpusCodec();try{await open(f);const packet=codec.encode(pcm(16000,960));await reply(f,packet);await started;const old=stops(f)[0].payload;await f.adapter.receiveDevice(resolution(old));await f.adapter.receiveDevice({type:'abort'});assert.equal(f.channels[0].closed,1);release();await until(()=>f.device.some(x=>x.payload.flush));assert.equal(listenStarts(f),1);
+  await f.adapter.receiveDevice({type:'listen',state:'start',mode:'realtime'});assert.equal(f.channels.length,2);await reply(f,packet);await until(()=>stops(f).length===2);await assert.rejects(f.adapter.receiveDevice(resolution(old)),{code:'device_protocol_invalid'});assert.equal(listenStarts(f),2);
+ }finally{release();codec.close();await f.adapter.close();}
 });
 
 test('output message count is bounded independently from bytes and queued upstream events are bounded',async()=>{

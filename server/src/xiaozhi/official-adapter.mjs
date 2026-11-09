@@ -9,12 +9,13 @@ const text=value=>typeof value==='string'&&value.length<=8192?value:null;
 const validAudio=a=>a?.format==='opus'&&[16000,24000].includes(a.sample_rate)&&a.channels===1&&a.frame_duration===60;
 
 /** Trusted gateway session. Configuration and transports are never device-controlled.
- * Hardware ACK is local playout information, never an upstream history truncate.
+ * Hardware ACK is local playout information; rejected terminal resolution is
+ * separate from heard duration. Neither is an upstream history truncate.
  */
 export function createOfficialXiaozhiAdapter({configuration,sendDevice,connect=connectOfficialCloud,createCodec=createOpusCodec,signal,onStatus}={}){
  if(typeof sendDevice!=='function')throw failure('device_protocol_invalid');
  const sessionId=randomUUID(),life=new AbortController(),timers=new Set(),operations=new Set(),outbox=[],playbacks=new Map();
- const metrics={inputPackets:0,inputPcmBytes:0,droppedInputPackets:0,outputPackets:0,outputPcmBytes:0,turnsCompleted:0,pendingInputBytes:0,pendingOutputBytes:0,pendingOutputMessages:0,peakInputBytes:0,peakOutputBytes:0,peakOutputMessages:0};
+ const metrics={inputPackets:0,inputPcmBytes:0,droppedInputPackets:0,outputPackets:0,outputPcmBytes:0,turnsCompleted:0,playbackRejections:0,pendingInputBytes:0,pendingOutputBytes:0,pendingOutputMessages:0,peakInputBytes:0,peakOutputBytes:0,peakOutputMessages:0};
  let code='idle',closed=false,helloSeen=false,codec,upstreamCodec,channel=null,epoch=0,connecting=null,desiredListen=false,listening=false;
  let current=null,generation=0,inputCount=0,eventBytes=0,eventCount=0,pumping=false,nextPacketAt=0,responseTimer=null;
  let inputTail=Promise.resolve(),eventTail=Promise.resolve();
@@ -50,6 +51,9 @@ export function createOfficialXiaozhiAdapter({configuration,sendDevice,connect=c
     if(closed||item.generation!==null&&item.generation!==generation)continue;
    }
    if(item.kind==='start'){item.response.start='sending';item.response.startResult=new Promise(resolve=>{item.response.resolveStart=resolve;});}
+   // A peer can receive STOP and resolve playback before the transport's write
+   // callback. Record that intent now, but settle only after the write succeeds.
+   if(item.kind==='stop')item.response.stopSubmitted=true;
    try{await bounded(sendDevice(item.payload,{binary:item.binary}));}catch(error){if(item.kind==='start'){item.response.start='failed';item.response.resolveStart(false);}throw error;}
    // Resolve START even after its generation was cancelled: abort must know
    // whether the device actually saw it before deciding to emit a matching flush.
@@ -87,12 +91,12 @@ export function createOfficialXiaozhiAdapter({configuration,sendDevice,connect=c
   await sendJson({type:'listen',state:'start',mode:'auto'},owner);listening=true;
  }
  async function resumeAfterPlayback(response){
-  if(response.resumed||response.interrupted||!response.done||!response.transportDone||response.totalSamples>0&&(response.acknowledgedMs===null||response.acknowledgedMs<Math.floor(response.totalSamples/16)))return;
+  if(current!==response||response.resumed||response.interrupted||!response.done||!response.transportDone||response.totalSamples>0&&response.terminalResolution!=='rejected'&&(response.acknowledgedMs===null||response.acknowledgedMs<Math.floor(response.totalSamples/16)))return;
   response.resumed=true;if(current===response)current=null;await startListening();
  }
  function newResponse(){
   if(current&&!current.resumed)throw failure('provider_protocol_invalid');generation++;listening=false;deadline(true);codec.resetEncoder();upstreamCodec.resetDecoder();
-  current={id:randomUUID(),playbackId:randomUUID(),start:'none',startResult:null,done:false,interrupted:false,transportDone:false,resumed:false,totalSamples:0,deliveredSamples:0,acknowledgedMs:null};
+  current={id:randomUUID(),playbackId:randomUUID(),start:'none',startResult:null,done:false,interrupted:false,stopSubmitted:false,transportDone:false,resumed:false,totalSamples:0,deliveredSamples:0,acknowledgedMs:null,terminalResolution:null};
   playbacks.set(current.id,current);while(playbacks.size>32)playbacks.delete(playbacks.keys().next().value);return current;
  }
  async function event(owner,value){
@@ -150,12 +154,21 @@ export function createOfficialXiaozhiAdapter({configuration,sendDevice,connect=c
    if(message.type==='hello'){
     if(helloSeen||message.version!==1||message.transport!=='websocket'||message.audio_params?.sample_rate!==16000||!validAudio(message.audio_params))throw failure('device_protocol_invalid');
     validateOfficialCloudConfiguration(configuration);helloSeen=true;status('connecting');codec=createCodec();upstreamCodec=createCodec();await ensureChannel();
-    if(closed)throw failure(code);enqueue(control('hello',{version:1,transport:'websocket',audio_params:{format:'opus',sample_rate:16000,channels:1,frame_duration:60},features:{playback_ack:true,flush:true}}));status('ready');return;
+    if(closed)throw failure(code);enqueue(control('hello',{version:1,transport:'websocket',audio_params:{format:'opus',sample_rate:16000,channels:1,frame_duration:60},features:{playback_ack:true,flush:true,playback_resolution:true}}));status('ready');return;
    }
    if(!helloSeen||message.session_id!==undefined&&message.session_id!==sessionId)throw failure('device_protocol_invalid');
    if(message.type==='listen'&&message.state==='start'&&['auto','realtime'].includes(message.mode)){desiredListen=true;await startListening();return;}
    if(message.type==='listen'&&message.state==='stop'){await close();return;}
    if(message.type==='abort'){await interrupt();return;}
+   if(message.type==='playback_resolution'){
+    const response=playbacks.get(message.response_id);
+    if(message.state!=='rejected'||Object.keys(message).some(key=>!['type','state','response_id','playback_id','session_id'].includes(key))||'audio_end_ms' in message||!response||message.playback_id!==response.playbackId||response.interrupted)throw failure('device_protocol_invalid');
+    // Only an already accepted terminal event is idempotent. Returning here
+    // cannot resolve a newer response or send another upstream listen/start.
+    if(response.terminalResolution==='rejected')return;
+    if(current!==response||response.resumed||!response.done||!response.stopSubmitted)throw failure('device_protocol_invalid');
+    response.terminalResolution='rejected';metrics.playbackRejections++;await resumeAfterPlayback(response);return;
+   }
    if(message.type==='playback'){
     const response=playbacks.get(message.response_id);
     if(!response||message.playback_id!==response.playbackId||!Number.isSafeInteger(message.audio_end_ms)||message.audio_end_ms<0||message.audio_end_ms>Math.floor(response.deliveredSamples/16)||message.audio_end_ms<(response.acknowledgedMs??0))throw failure('device_protocol_invalid');
