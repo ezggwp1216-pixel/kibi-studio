@@ -41,6 +41,7 @@ export async function openStore(dataDir) {
   };
   if (state.telegram) unseal(state.telegram); // Fail closed on corrupt/incompatible secrets.
   if (state.ai) unseal(state.ai);
+  if (state.xiaozhi) unseal(state.xiaozhi);
   let queue = Promise.resolve();
   let pending = 0;
   return {
@@ -48,6 +49,7 @@ export async function openStore(dataDir) {
     seal,
     telegram: () => state.telegram ? unseal(state.telegram) : null,
     ai: () => state.ai ? unseal(state.ai) : null,
+    xiaozhi: () => state.xiaozhi ? unseal(state.xiaozhi) : null,
     async save() {
       const tempPath = join(dataDir, `.state-${randomBytes(8).toString('hex')}.tmp`);
       await writeFile(tempPath, JSON.stringify(state), { flag: 'wx', mode: 0o600 });

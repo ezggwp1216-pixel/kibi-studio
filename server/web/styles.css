@@ -12,3 +12,5 @@
 @media(max-width:1150px) and (min-width:651px){.heading-actions{flex-direction:column;max-width:190px}.heading-actions .button{width:100%}}
 @media(max-width:650px){.heading-actions{justify-content:flex-start;max-width:none;margin-top:22px;gap:10px}.page-heading .heading-actions .button{font-size:11px;padding:11px 13px}}
 @media(max-width:480px){.section-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.section-nav button{min-width:0;justify-content:flex-start;padding:11px 12px;min-height:42px;font-size:11px;white-space:normal}.section-nav button>span:first-child{flex-shrink:0}}
+
+.module-form{display:grid;gap:16px;max-width:620px;margin:20px 0}.module-form label{display:grid;gap:8px}.module-form select{font:inherit;width:100%;min-height:46px;padding:10px 14px;border:1px solid #c5c9d1;border-radius:8px;background:#fff;color:var(--ink)}.module-form select:disabled{background:#efeee9;color:var(--secondary);opacity:1}.module-form select:focus-visible{outline:3px solid var(--orange);outline-offset:1px}.module-form .button{justify-self:start}.form-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:16px 0}

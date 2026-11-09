@@ -42,7 +42,7 @@ function metadata(row){
  // The watcher stores only generation/revocation identity, never plaintext or ciphertext configuration.
  // updated_at is bookkeeping: preparing a pending replacement can change it while
  // the previously active generation must keep working until activation succeeds.
- return JSON.stringify([row.device_id,row.active_generation_id,row.generation_id,row.generation_device_id,row.source_hash,row.source_revision,row.configuration_revision,row.token_hash,row.state,row.created_at,row.expires_at]);
+ return JSON.stringify([row.device_id,row.project_id,row.active_generation_id,row.generation_id,row.generation_device_id,row.source_hash,row.source_revision,row.configuration_revision,row.token_hash,row.state,row.created_at,row.expires_at]);
 }
 function decrypt(row,master){
  const encoded=row.encrypted_config;
@@ -83,8 +83,10 @@ export function createCloudVoiceAuthorizer({dataDir=DEFAULT_DATA,masterKeyFile,p
   db.exec('PRAGMA query_only=ON; PRAGMA trusted_schema=OFF');
   const tables=db.prepare("SELECT name,type FROM sqlite_schema WHERE name IN ('voice_devices','voice_generations')").all();
   if(tables.length!==2||tables.some(table=>table.type!=='table'))throw fail();
-  lookup=db.prepare(`SELECT ${columns},g.encrypted_config FROM voice_generations g JOIN voice_devices d ON d.id=g.device_id WHERE g.token_hash=? LIMIT 2`);
-  watch=db.prepare(`SELECT ${columns} FROM voice_generations g JOIN voice_devices d ON d.id=g.device_id WHERE d.id=? AND g.id=? LIMIT 2`);
+  const hasProject=db.prepare('PRAGMA table_info(voice_devices)').all().some(column=>column.name==='project_id');
+  const scopedColumns=columns+(hasProject?',d.project_id':',NULL AS project_id');
+  lookup=db.prepare(`SELECT ${scopedColumns},g.encrypted_config FROM voice_generations g JOIN voice_devices d ON d.id=g.device_id WHERE g.token_hash=? LIMIT 2`);
+  watch=db.prepare(`SELECT ${scopedColumns} FROM voice_generations g JOIN voice_devices d ON d.id=g.device_id WHERE d.id=? AND g.id=? LIMIT 2`);
  }catch{
   try{db?.close();}catch{}if(dbGuard)try{closeSync(dbGuard.fd);}catch{}master?.fill(0);throw fail();
  }
@@ -119,7 +121,7 @@ export function createCloudVoiceAuthorizer({dataDir=DEFAULT_DATA,masterKeyFile,p
    retire('superseded');const controller=new AbortController();
    current={deviceId:row.device_id,generationId:row.generation_id,metadata:metadata(row),controller};
    timer=setInterval(poll,pollMs);timer.unref?.();totals.authorized=increment(totals.authorized);code='authorized';
-   return{configuration,signal:controller.signal};
+   return{configuration,signal:controller.signal,principal:Object.freeze({kind:'legacy',id:typeof row.project_id==='string'?row.project_id:null})};
   },
   snapshot:()=>({kind:'cloud-voice-authorizer',code,metrics:{...totals,activeScopes:current?1:0,pollers:timer===null?0:1}}),
   close(){if(closed)return;closed=true;code='closed';retire('closed');master.fill(0);try{db.close();}finally{closeSync(dbGuard.fd);}}

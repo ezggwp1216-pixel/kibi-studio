@@ -84,6 +84,7 @@ function setSection(id, { focus = true, updateHash = true } = {}) {
 }
 function showLogin(message = '') {
   state.authenticated = false; state.csrf = ''; state.settings = null; state.overview = null; state.loadedSettings = false;
+  $('voice-form').reset(); delete $('voice-form').dataset.dirty; $('xiaozhi-pairing').textContent='';
   $('ai-form').reset(); $('telegram-form').reset(); delete $('ai-form').dataset.dirty; delete $('telegram-form').dataset.dirty;
   clearInterval(state.timer); state.timer = null;
   for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
@@ -126,13 +127,18 @@ function renderModuleSummary(modules) {
   const container = $('module-summary-list'); container.replaceChildren();
   for (const module of modules) { const row = node('div', 'summary-row'); const names = { notifications: 'Уведомления', telegram: 'Telegram', ai: 'Текстовый ИИ', voice: 'Голосовой ИИ', schedules: 'Расписания' }; let status = module.status === 'ready' ? 'Работает' : module.status === 'configured' ? 'Настроен' : module.status === 'planned' ? 'В планах' : 'Не настроен'; let ready = module.status === 'ready'; const setting = state.settings?.[module.id]; if (setting) { status = setting.configured ? (setting.enabled ? 'Включён' : 'Выключен') : 'Не настроен'; ready = setting.configured && setting.enabled; } if (module.id === 'voice') { const voice = setting || module; status = voiceLabel(voice); ready = voice.status === 'active' || voice.status === 'listening'; } row.append(node('span', '', names[module.id] || module.name), node('span', `summary-state${ready ? ' ready' : ''}`, status)); container.append(row); }
 }
-function voiceLabel(voice) { return ({disabled:'Выключен',not_configured:'Нужен ключ',listening:'Ожидает Киби',connecting:'Подключается',active:'Разговор идёт',error:'Нужна настройка',closed:'Остановлен'})[voice.status] || 'Недоступен'; }
+function voiceLabel(voice) { return ({disabled:'Выключен',not_configured:'Нужна настройка',listening:'Ожидает Киби',connecting:'Подключается',active:'Разговор идёт',error:'Нужна настройка',closed:'Остановлен'})[voice.status] || 'Недоступен'; }
 function renderVoice(voice) {
   if (!voice) return;
   $('voice-status').textContent = voiceLabel(voice);
   $('voice-status').className = `status-label${['listening','active'].includes(voice.status) ? '' : ' neutral'}`;
   const details = { disabled:'Голос выключен в настройках запуска сервера. Для включения следуйте docs/VOICE.md.', tls_required:'Не заданы приватные TLS-файлы голосового шлюза. Настройте их на сервере по docs/VOICE.md.', tls_failed:'TLS-файлы недоступны, небезопасны или сертификат не подходит. Проверьте их права, срок и соответствие ключу.', legacy_unavailable:'Хранилище совместимости со Studio недоступно. Проверьте установку на сервере.', gateway_unavailable:'Голосовой шлюз не запустился. Проверьте адрес, порт и настройки сервера.' };
   $('voice-detail').textContent = details[voice.code] || (voice.status === 'not_configured' ? 'Сохраните API-ключ OpenAI в модуле ИИ. Голос использует отдельную фиксированную модель gpt-realtime.' : voice.status === 'active' ? 'Киби подключена к голосовому шлюзу. Приём и воспроизведение звука проверяются на устройстве.' : voice.status === 'connecting' ? 'Киби устанавливает голосовое соединение. Дождитесь завершения подключения.' : 'TLS-шлюз запущен и ожидает устройство. Доступ к OpenAI и звук пока не подтверждены.');
+  if(voice.provider==='xiaozhi') $('voice-detail').textContent = voice.configured ? (voice.status==='active'?'Разговор через Xiaozhi подключён. Звук проверяется на Киби.':'Выбран Xiaozhi. Платного переключения на OpenAI нет.') : 'Завершите привязку Xiaozhi и выберите один проект. OpenAI в этом режиме не используется.';
+  const registration=voice.registration;
+  if(registration){$('xiaozhi-status').textContent=registration.configured?'Аккаунт Xiaozhi привязан':registration.status==='pending'?'Ожидает привязку':registration.code?xiaozhiMessage(registration.code):'Не подключён';$('xiaozhi-pairing').textContent=registration.pairingCode?`Код устройства: ${registration.pairingCode}${registration.expiresAt?' · действует до '+new Date(registration.expiresAt).toLocaleTimeString('ru-RU'):''}`:'';}
+  if(!$('voice-form').dataset.dirty){$('voice-provider').value=voice.provider||'openai';$('voice-scope-kind').value=voice.scope?.kind||'legacy';$('voice-scope-id').value=voice.scope?.id||'';}
+  $('voice-provider').disabled=!!voice.providerLocked;
   $('voice-endpoint').textContent = voice.enabled ? `Адрес устройства: ${voice.endpoint}` : '';
 }
 function renderSettings(fillForms = false) {
@@ -200,3 +206,8 @@ async function boot() {
   else if (results[1].status === 'rejected') feedback('login-error', results[1].reason.message, true);
 }
 boot();
+
+function xiaozhiMessage(code){return ({xiaozhi_pending:'Добавьте устройство по коду в Xiaozhi и повторите проверку.',xiaozhi_challenge_expired:'Код истёк. Получите новый.',xiaozhi_not_configured:'Получите код для привязки.',xiaozhi_untrusted_endpoint:'Сервис вернул неподдерживаемый адрес.',xiaozhi_mqtt_unsupported:'Аккаунт выдал MQTT. Эта версия поддерживает WebSocket.',xiaozhi_timeout:'Xiaozhi не ответил вовремя. Повторите позже.',xiaozhi_busy:'Настройка уже выполняется.',xiaozhi_provider_failed:'Не удалось связаться с Xiaozhi. Повторите позже.'})[code]||'Привязка пока не завершена. Повторите настройку.';}
+$('voice-form').addEventListener('input',()=>{$('voice-form').dataset.dirty='1';});
+$('voice-form').addEventListener('submit',event=>{event.preventDefault();pending(event.submitter,async()=>{try{const result=await api('/api/settings/voice',{method:'POST',body:{provider:$('voice-provider').value,scope:{kind:$('voice-scope-kind').value,id:$('voice-scope-id').value.trim()}}});state.settings.voice=result.voice;delete $('voice-form').dataset.dirty;renderVoice(result.voice);feedback('voice-feedback','Режим сохранён. Активный разговор завершён; следующий начнётся с выбранным провайдером.');}catch(error){feedback('voice-feedback',error.message,true);}});});
+for(const [id,operation] of [['xiaozhi-prepare','prepare'],['xiaozhi-activate','activate']])$(id).addEventListener('click',event=>pending(event.currentTarget,async()=>{try{const result=await api('/api/settings/xiaozhi/'+operation,{method:'POST',body:{}});state.settings.voice=result.voice;renderVoice(result.voice);feedback('xiaozhi-feedback',result.registration.configured?'Привязка подтверждена. Модель и голос выбираются в Xiaozhi.':'Добавьте устройство в Xiaozhi по коду выше, затем проверьте привязку.');}catch(error){feedback('xiaozhi-feedback',xiaozhiMessage(error.code),true);await refreshData();}}));

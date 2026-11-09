@@ -53,7 +53,7 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
   if (!/^\/(?:[A-Za-z0-9_-]+\/)*$/.test(cookiePath)) throw new Error('invalid_cookie_path');
   const store = await openStore(dataDir);
   const state = store.state;
-  const voice = await startVoiceModule({ store, publicOrigin, ...(voiceConfig ? { config: voiceConfig } : {}) });
+  const voice = await startVoiceModule({ store, publicOrigin, registrationFetch: fetchImpl, ...(voiceConfig ? { config: voiceConfig } : {}) });
   const salt = randomBytes(16);
   const passwordHash = scryptSync(adminPassword, salt, 32);
   adminPassword = undefined;
@@ -186,6 +186,7 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
           ] });
       }
       if (method === 'GET' && path === '/api/settings') { admin(req); return json(res, 200, { telegram: telegramStatus(), ai: aiStatus(), voice: voice.status() }); }
+      if (method === 'GET' && path === '/api/settings/xiaozhi') { admin(req); return json(res, 200, voice.registration.snapshot()); }
       if (path.startsWith('/api/')) {
         // Authentication and body bounds occur before waiting for the persistence
         // queue. This prevents queued slow bodies from blocking other clients.
@@ -195,6 +196,15 @@ export async function createKibiServer({ dataDir, adminPassword, publicOrigin, f
         let body;
         const needsBody = method === 'POST' && !['/api/modules/telegram/test'].includes(path);
         if (needsBody) body = await bodyOf(req);
+        // Network setup and its private writes run outside the store queue.
+        if (!isDevice && method === 'POST' && path === '/api/settings/voice') {
+          const selected = await voice.selectProvider(body); return json(res, 200, {ok:true,voice:selected});
+        }
+        if (!isDevice && method === 'POST' && ['/api/settings/xiaozhi/prepare','/api/settings/xiaozhi/activate'].includes(path)) {
+          rate('xiaozhi-setup',12);
+          try { const setup = await voice.registration[path.endsWith('/prepare')?'prepare':'activate'](); voice.reconcile(); return json(res,200,{ok:true,registration:setup,voice:voice.status()}); }
+          catch(error) { const allowed=new Set(['xiaozhi_not_configured','xiaozhi_pending','xiaozhi_challenge_expired','xiaozhi_invalid_response','xiaozhi_untrusted_endpoint','xiaozhi_mqtt_unsupported','xiaozhi_provider_failed','xiaozhi_timeout','xiaozhi_closed','xiaozhi_busy','xiaozhi_storage_failed','xiaozhi_storage_invalid']); return json(res,502,{ok:false,code:allowed.has(error?.code)?error.code:'xiaozhi_provider_failed'}); }
+        }
         const outcome = await store.exclusive(async () => {
           if (isDevice) {
             const device = authenticatedDevice;

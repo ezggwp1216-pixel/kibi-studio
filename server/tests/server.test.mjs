@@ -313,3 +313,16 @@ test('upstream deadlines fail closed even when an injected transport ignores abo
   ]);
   assert.deepEqual(ai, { code: 'ai_unavailable' }); assert.equal(telegram, false);
 });
+
+test('Xiaozhi setup is explicit, owner-only, CSRF guarded, and cannot fall back to paid voice', async t => {
+ let calls=0;
+ const f=await fixture(t,{fetchImpl:async()=>{calls++;throw new Error('PRIVATE_PROVIDER_TOKEN');}});
+ assert.equal((await f.call('/api/settings/xiaozhi')).status,401);await f.login();
+ assert.equal((await f.call('/api/settings/xiaozhi',{admin:true})).json.configured,false);assert.equal(calls,0);
+ assert.equal((await f.call('/api/settings/xiaozhi/prepare',{method:'POST',admin:true,body:{},headers:{'X-CSRF-Token':'bad'}})).status,403);assert.equal(calls,0);
+ const selected=await f.call('/api/settings/voice',{method:'POST',admin:true,body:{provider:'xiaozhi',scope:{kind:'legacy',id:'project-test'}}});
+ assert.equal(selected.status,200);assert.equal(selected.json.voice.provider,'xiaozhi');assert.equal(selected.json.voice.configured,false);assert.equal(calls,0);
+ const prepare=await f.call('/api/settings/xiaozhi/prepare',{method:'POST',admin:true,body:{}});
+ assert.equal(prepare.status,502);assert.equal(calls,1);assert.doesNotMatch(prepare.text,/PRIVATE_PROVIDER_TOKEN|stack|\.mjs/);
+ await f.restart();await f.login();assert.equal((await f.call('/api/settings',{admin:true})).json.voice.provider,'xiaozhi');
+});
