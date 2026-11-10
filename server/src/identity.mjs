@@ -94,7 +94,7 @@ export async function createIdentityServer(options,createTenant){
   if(closed||!permission||!delegatedDeviceExists(delegation)||deviceOwners.get(sha(token))!==delegation.accountId||permission.signal.aborted)return null;
   return {...permission,principal:Object.freeze({kind:'account',accountId:delegation.accountId,id:permission.principal.id})};
  };
- const tenantOptions=(id,extra={})=>({...coreOptions,...extra,onDevicesChanged:hashes=>indexTokens(id,hashes),...(id==='owner'?{authorizeDelegatedDevice,delegatedDeviceExists,studioAccountExists}:{tenantVoiceStatus:()=>owner.kibiContext.voice.delegatedStatus(id)})});
+ const tenantOptions=(id,extra={})=>({...coreOptions,...extra,onDevicesChanged:hashes=>indexTokens(id,hashes),...(id==='owner'?{authorizeDelegatedDevice,delegatedDeviceExists,studioAccountExists}:{tenantVoiceStatus:()=>owner.kibiContext.voice.delegatedStatus(id),tenantVoiceDiagnostics:deviceId=>owner.kibiContext.voice.diagnosticsFor(id,deviceId)})});
  owner=await createTenant(tenantOptions('owner'));tenants.set('owner',owner);indexTokens('owner',owner.kibiContext.tokenHashes());
  try{
   accounts=await openAccounts(dataDir);
@@ -179,6 +179,26 @@ export async function createIdentityServer(options,createTenant){
    if(path==='/api/studio/devices'&&method==='GET'){
     const token=studioBearer(req);rate(`studio-devices:${address}`,240);
     return json(res,200,await studioLinks.withAuthorization(token,'devices.list',async principal=>({devices:(await readyTenant(principal.accountId)).kibiContext.listDevices()})));
+   }
+   const studioDiagnostics=/^\/api\/studio\/devices\/([A-Za-z0-9_-]{1,128})\/voice-diagnostics$/.exec(path);
+   if(studioDiagnostics&&method==='GET'){
+    const token=studioBearer(req);rate(`studio-diagnostics:${address}`,240);
+    return json(res,200,await studioLinks.withAuthorization(token,'voice.status',async principal=>{
+     const tenant=await readyTenant(principal.accountId),deviceId=studioDiagnostics[1];
+     // Tenant resolution may await while this bearer expires or is cancelled.
+     const current=studioLinks.authenticate(token);
+     if(closed||principal.signal.aborted||!current||current.accountId!==principal.accountId||current.connectionId!==principal.connectionId)throw fail(401,'studio_unauthorized');
+     if(!tenant.kibiContext.hasDevice(deviceId))throw fail(404,'device_not_found');
+     return tenant.kibiContext.voice.diagnosticsFor(deviceId);
+    }));
+   }
+   const panelDiagnostics=/^\/api\/devices\/([A-Za-z0-9_-]{1,128})\/voice-diagnostics$/.exec(path);
+   if(panelDiagnostics&&method==='GET'){
+    const s=authorize(req);if(s.user.role!=='user')throw fail(403,'user_diagnostics_only');bound.set(req,s);
+    const tenant=await readyTenant(s.user.id),deviceId=panelDiagnostics[1];
+    if(closed||resolver(req)!==s)throw fail(401,'unauthorized');
+    if(!tenant.kibiContext.hasDevice(deviceId))throw fail(404,'device_not_found');
+    return json(res,200,tenant.kibiContext.voice.diagnosticsFor(deviceId));
    }
    if(path==='/api/studio/pairing/claim'&&method==='POST'){
     const token=studioBearer(req),body=await bodyOf(req);if(!exactBody(body,['code']))throw fail(400,'invalid_input');

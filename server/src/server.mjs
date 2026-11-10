@@ -50,7 +50,7 @@ export async function createKibiServer(options = {}) {
   return createIdentityServer(options, createTenantServer);
 }
 
-async function createTenantServer({ dataDir, adminPassword, publicOrigin, fetchImpl = fetch, webRoot = fileURLToPath(new URL('../web/', import.meta.url)), voiceConfig, cookiePath = process.env.KIBI_COOKIE_PATH || '/', sessionResolver, ordinaryUser = false, onDevicesChanged = () => {}, tenantVoiceStatus, authorizeDelegatedDevice, delegatedDeviceExists, studioAccountExists } = {}) {
+async function createTenantServer({ dataDir, adminPassword, publicOrigin, fetchImpl = fetch, webRoot = fileURLToPath(new URL('../web/', import.meta.url)), voiceConfig, cookiePath = process.env.KIBI_COOKIE_PATH || '/', sessionResolver, ordinaryUser = false, onDevicesChanged = () => {}, tenantVoiceStatus, tenantVoiceDiagnostics, authorizeDelegatedDevice, delegatedDeviceExists, studioAccountExists } = {}) {
   let origin;
   try { origin = new URL(publicOrigin); } catch { throw new Error('invalid_public_origin'); }
   if (!['http:', 'https:'].includes(origin.protocol) || origin.origin !== publicOrigin) throw new Error('invalid_public_origin');
@@ -61,6 +61,7 @@ async function createTenantServer({ dataDir, adminPassword, publicOrigin, fetchI
   const delegatedAuthorizer = ordinaryUser ? createPanelVoiceAuthorizer({store,requireCredentials:false}) : null;
   const voice = ordinaryUser ? {
     status: () => tenantVoiceStatus?.() || ({configured:false,enabled:false,status:'disabled',code:'tenant_voice_unavailable',model:null,endpoint:null,tls:false,legacyConfigured:false,legacyReady:false,activeSessions:0}),
+    diagnosticsFor: deviceId => tenantVoiceDiagnostics(deviceId),
     reconcile: () => delegatedAuthorizer.reconcile(), close:async()=>{delegatedAuthorizer.close();},
   } : await startVoiceModule({ store, publicOrigin, registrationFetch: fetchImpl, authorizeDelegatedDevice, delegatedDeviceExists, studioAccountExists, ...(voiceConfig ? { config: voiceConfig } : {}) });
   const salt = randomBytes(16);

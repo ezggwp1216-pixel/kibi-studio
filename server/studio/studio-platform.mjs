@@ -12,6 +12,7 @@ export const platformTools=Object.freeze([
  def('kibi_import_asset','Import a public PNG/GIF/BMP or verified built-in recipe into the existing managed artwork bank. Keeps the public stock base unchanged and appends verified resource blocks. Never installs executable firmware. Returns a compact exact API, not raw image data.',{type:'object',properties:{url:{type:'string'},recipe:{type:'string'}},required:['url'],additionalProperties:false}),
  def('kibi_account_status','Read the safe Kibi account connection and voice eligibility; never returns credentials.'),
  def('kibi_account_devices','List only devices belonging to the connected account.'),
+ def('kibi_device_diagnostics','Read server observations for one device owned by the connected account. Read-only; no provider calls. Empty observations do not prove device failure or physical audio.',schema({deviceId:{type:'string'}})),
  def('kibi_pair_device','Claim the code displayed by the user’s Kibi into the connected account. Device token is delivered only to the polling device. Requires the user’s task to connect this Kibi.',schema({code:{type:'string'}})),
  def('kibi_activate_voice','Activate Xiaozhi for one paired device owned by the connected account. Requires separate server-owner approval; cannot change provider or grant access.',schema({deviceId:{type:'string'}})),
  def('kibi_server_guide','Read the public server API, device voice protocol or hardware instructions before implementing account pairing and voice. This does not configure credentials.',schema({topic:{type:'string',enum:['pairing','voice','hardware','services']}})),
@@ -27,6 +28,7 @@ Studio platform capabilities:
 - This is account device pairing, not the older project-bound voice capability/paid OpenAI service. Do not add a KIBI_VOICE_TRANSPORT declaration for this account-paired mode. It needs Wi-Fi but no provider API key; declare requirements accordingly. Do not use the legacy voiceGateway endpoint as proof of eligibility.
 - The server owner must explicitly approve the account for the shared Xiaozhi pilot. Never claim that registration alone enables voice. Eligibility and activation are actual statuses from kibi_account_status. No paid fallback.
 - After pairing, use kibi_account_devices and kibi_activate_voice only for the user's own intended Kibi. The device polls its own token; no tool reveals it to you.
+- Use kibi_device_diagnostics with an own deviceId from kibi_account_devices to read bounded server observations. This read never starts voice or contacts a provider. Missing observations/counters are unknown; never invent zeroes. Observations cannot establish pre-authentication client failures, microphone quality or physical playback.
 - Compilation, a picture or a listening socket do not prove physical audio. Report which stages were actually tested.
 `;
 
@@ -45,6 +47,7 @@ export async function createStudioPlatform({root,getStore,getEpoch,announce=asyn
   try{
   if(name==='kibi_account_status')result=await accountInfo();
   else if(name==='kibi_account_devices')result=await account.listDevices();
+  else if(name==='kibi_device_diagnostics')result=await account.deviceDiagnostics(args);
   else if(name==='kibi_pair_device')result=await account.claimPairing(args);
   else if(name==='kibi_activate_voice')result=await account.activateVoice(args);
   else if(name==='kibi_search_resources')result=await readResources.searchPublicResources(args.query);
@@ -70,6 +73,7 @@ export async function createStudioPlatform({root,getStore,getEpoch,announce=asyn
   if(!route.startsWith('/api/account'))return false;
   if(route==='/api/account'&&request.method==='GET')send(response,await accountInfo());
   else if(route==='/api/account/devices'&&request.method==='GET')send(response,await account.listDevices());
+  else if(/^\/api\/account\/devices\/[0-9a-f-]+\/voice-diagnostics$/.test(route)&&request.method==='GET')send(response,await account.deviceDiagnostics({deviceId:route.split('/')[4]}));
   else if(route==='/api/account/connect'&&request.method==='POST')send(response,await account.connect(await body(request)));
   else if(route==='/api/account/disconnect'&&request.method==='POST')send(response,await account.disconnect());
   else if(route==='/api/account/pair'&&request.method==='POST')send(response,await account.claimPairing(await body(request)));

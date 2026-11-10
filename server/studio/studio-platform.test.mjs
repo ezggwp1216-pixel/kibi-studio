@@ -4,7 +4,7 @@ import {mkdtemp,mkdir,writeFile,readFile,rm,realpath,rename,symlink,lstat} from 
 import {join} from 'node:path';
 import {createStudioPlatform,platformTools,platformInstructions} from './studio-platform.mjs';
 
-async function fixture(t){
+async function fixture(t,responder){
  const root=await realpath(await mkdtemp('/private/tmp/kibi-platform-unit-'));
  t.after(()=>rm(root,{recursive:true,force:true}));
  await mkdir(join(root,'templates/kibi-base/firmware'),{recursive:true});
@@ -15,7 +15,7 @@ async function fixture(t){
  const calls=[],announcements=[],mutations=[];
  const platform=await createStudioPlatform({root,getStore:()=>current,getEpoch:()=>epoch,
   announce:async()=>{announcements.push(1);},mutate:async action=>{mutations.push(1);return action();},
-  accountOptions:{apiBase:'https://kibi.example/server/',fetchImpl:async(url,opts)=>{calls.push({url:String(url),method:opts?.method});return new Response(JSON.stringify({ok:false,code:'offline_fixture'}),{status:401,headers:{'content-type':'application/json'}});}},
+  accountOptions:{apiBase:'https://kibi.example/server/',now:()=>Date.parse('2026-11-10T00:00:00.000Z'),fetchImpl:async(url,opts)=>{calls.push({url:String(url),method:opts?.method});if(responder)return responder(url,opts);return new Response(JSON.stringify({ok:false,code:'offline_fixture'}),{status:401,headers:{'content-type':'application/json'}});}},
  });
  t.after(()=>platform.close());
  return{root,platform,calls,announcements,mutations,setEpoch:value=>{epoch=value;},setStore:value=>{current=value;}};
@@ -82,4 +82,47 @@ test('account connect forwards only the explicit form action through injected tr
  await assert.rejects(platform.route({method:'POST'},null,{route:'/api/account/connect',body:async()=>({code:`kibi_link_${'A'.repeat(32)}`,label:'Public unit fixture'}),send:()=>{sends++;}}));
  assert.equal(calls.length,1);assert.equal(calls[0].url,'https://kibi.example/server/api/studio/redeem');assert.equal(calls[0].method,'POST');assert.equal(sends,0);
  const context=await platform.context();assert.equal(JSON.stringify(context).includes(`kibi_link_${'A'.repeat(32)}`),false);assert.equal(JSON.stringify(context).includes('kibi_studio_'),false);
+});
+
+
+const diagnosticDevice='11111111-1111-4111-8111-111111111111';
+const diagnosticDto=()=>({schemaVersion:'1.0',source:'server',retentionSeconds:3600,observed:false,updatedAt:null,connection:null,metrics:null,events:[]});
+const diagnosticReply=data=>new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});
+async function diagnosticPlatform(t,onRead=()=>diagnosticReply(diagnosticDto())){
+ const scopes=['pairing.claim','devices.list','voice.status','voice.activate','catalog.read'];
+ const f=await fixture(t,(url,options)=>String(url).endsWith('/redeem')?diagnosticReply({token:'kibi_studio_'+'a'.repeat(43),apiBase:'https://kibi.example/server/',scopes,account:{id:'22222222-2222-4222-8222-222222222222',email:'unit@example.test',role:'user'},connection:{id:'33333333-3333-4333-8333-333333333333',label:'Studio',createdAt:'2026-11-10T00:00:00.000Z',expiresAt:'2027-02-08T00:00:00.000Z',scopes}}):onRead(url,options));
+ await f.platform.route({method:'POST'},null,{route:'/api/account/connect',body:async()=>({code:'kibi_link_'+'a'.repeat(32),label:'Studio'}),send(){}});
+ return f;
+}
+
+test('device diagnostics is a read-only device-scoped tool and local GET route with no model secret or project mutation',async t=>{
+ const definition=platformTools.find(tool=>tool.name==='kibi_device_diagnostics');
+ assert.ok(definition);assert.deepEqual(definition.inputSchema.required,['deviceId']);assert.equal(definition.inputSchema.additionalProperties,false);
+ const f=await diagnosticPlatform(t);
+ assert.deepEqual(await f.platform.tool('kibi_device_diagnostics',{deviceId:diagnosticDevice}),{handled:true,result:diagnosticDto()});
+ let result;
+ const route=`/api/account/devices/${diagnosticDevice}/voice-diagnostics`;
+ assert.equal(await f.platform.route({method:'GET'},null,{route,body:async()=>{throw Error('no body');},send:(_response,value)=>{result=value;}}),true);
+ assert.deepEqual(result,diagnosticDto());
+ assert.equal(await f.platform.route({method:'POST'},null,{route,body:async()=>{throw Error('no body');},send(){throw Error('no send');}}),false);
+ assert.deepEqual(f.calls.slice(1).map(call=>call.url),Array(2).fill(`https://kibi.example/server/api/studio/devices/${diagnosticDevice}/voice-diagnostics`));
+ assert.ok(f.calls.slice(1).every(call=>call.method==='GET'));assert.deepEqual(f.mutations,[]);assert.deepEqual(f.announcements,[]);
+ assert.equal(JSON.stringify(result).includes('kibi_studio_'),false);
+});
+
+test('diagnostics tool rejects revoked turns before read and withholds delayed data after project or epoch changes',async t=>{
+ assert.ok(platformTools.some(tool=>tool.name==='kibi_device_diagnostics'));
+ for(const change of ['project','epoch','turn']){
+  let enter,resolve;const entered=new Promise(done=>{enter=done;});
+  const f=await diagnosticPlatform(t,()=>{enter();return new Promise(done=>{resolve=done;});});
+  await assert.rejects(f.platform.tool('kibi_device_diagnostics',{deviceId:diagnosticDevice},()=>{throw Error('revoked turn');}),/revoked turn/);
+  assert.equal(f.calls.length,1);
+  let revoked=false;
+  const pending=f.platform.tool('kibi_device_diagnostics',{deviceId:diagnosticDevice},()=>{if(revoked)throw Error('revoked turn');});
+  await entered;
+  if(change==='project')f.setStore({projectId:'changed'});else if(change==='epoch')f.setEpoch(2);else revoked=true;
+  resolve(diagnosticReply(diagnosticDto()));
+  await assert.rejects(pending,change==='turn'?/revoked turn/:{status:409});
+  assert.equal(f.calls.length,2);assert.deepEqual(f.mutations,[]);assert.deepEqual(f.announcements,[]);
+ }
 });

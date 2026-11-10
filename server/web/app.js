@@ -2,7 +2,7 @@
 
 const $ = (id) => document.getElementById(id);
 const API_BASE = new URL('.', import.meta.url);
-const state = { authenticated: false, user: null, authMode: 'login', generation: 0, csrf: '', overview: null, settings: null, loadedSettings: false, refreshing: false, timer: null, section: 'overview', messageTarget: null, confirmAction: null, refreshFailed: false, instructions: '', instructionsLoading: false, voiceDelegationPending: '', voiceStudioAccountPending: '', studioDialogVersion: 0, studioConnectionsVersion: 0, studioPending: '' };
+const state = { authenticated: false, user: null, authMode: 'login', generation: 0, csrf: '', overview: null, settings: null, loadedSettings: false, refreshing: false, timer: null, section: 'overview', messageTarget: null, confirmAction: null, refreshFailed: false, instructions: '', instructionsLoading: false, voiceDelegationPending: '', voiceStudioAccountPending: '', studioDialogVersion: 0, studioConnectionsVersion: 0, studioPending: '', diagnosticsVersion: 0, diagnosticsDeviceId: '', diagnosticsPending: false, diagnosticsSuspended: false };
 const labels = { overview: 'Обзор', devices: 'Устройства', modules: 'Модули', guide: 'Инструкция' };
 const errorMessages = {
   origin_forbidden: 'Адрес панели не совпадает с KIBI_PUBLIC_ORIGIN. Откройте настроенный адрес сервера.',
@@ -118,7 +118,7 @@ function setAuthMode(mode) {
 }
 function clearAccountUI() {
   state.generation += 1; state.authenticated = false; state.user = null; state.csrf = ''; state.settings = null; state.overview = null; state.loadedSettings = false; state.refreshing = false; state.refreshFailed = false; state.messageTarget = null; state.confirmAction = null; state.voiceDelegationPending = ''; state.voiceStudioAccountPending = '';
-  clearStudioDialog(); $('studio-connect').hidden = true;
+  state.diagnosticsSuspended = false; clearVoiceDiagnostics(); clearStudioDialog(); $('studio-connect').hidden = true;
   clearInterval(state.timer); state.timer = null;
   for (const dialog of document.querySelectorAll('dialog')) { if (dialog.open) dialog.close(); delete dialog.dataset.pending; }
   for (const form of document.querySelectorAll('form')) { form.reset(); delete form.dataset.dirty; }
@@ -146,7 +146,7 @@ function setVoicePermissions(owner) {
 function syncVoiceDelegationControls() {
   const owner = state.authenticated && state.user?.role === 'owner';
   for (const control of $('voice-delegation-form').querySelectorAll('input, button')) {
-    control.disabled = !owner || !state.settings?.voice || !!state.voiceDelegationPending || !!state.voiceStudioAccountPending || (control.id === 'voice-delegation-revoke' && !state.settings.voice.delegation);
+    control.disabled = !owner || !state.settings?.voice || !!state.voiceDelegationPending || !!state.voiceStudioAccountPending || (control.id === 'voice-delegation-revoke' && !state.settings.voice.delegation && state.settings.voice.activityVisibility !== 'service_only');
     control.dataset.ownerOnlyDisabled = String(!owner);
     if (control.tagName === 'BUTTON') {
       const busy = state.voiceDelegationPending === control.id;
@@ -237,7 +237,7 @@ async function revokeStudioConnection(id) {
 function syncVoiceStudioAccountControls() {
   const owner = state.authenticated && state.user?.role === 'owner';
   for (const control of $('voice-studio-account-form').querySelectorAll('input, button')) {
-    control.disabled = !owner || !state.settings?.voice || !!state.voiceStudioAccountPending || !!state.voiceDelegationPending || (control.id === 'voice-studio-account-revoke' && !state.settings.voice.studioAccountId); control.dataset.ownerOnlyDisabled = String(!owner);
+    control.disabled = !owner || !state.settings?.voice || !!state.voiceStudioAccountPending || !!state.voiceDelegationPending || (control.id === 'voice-studio-account-revoke' && !(state.settings.voice.studioVoiceApproved ?? !!state.settings.voice.studioAccountId)); control.dataset.ownerOnlyDisabled = String(!owner);
     if (control.tagName === 'BUTTON') { const busy = state.voiceStudioAccountPending === control.id; control.textContent = busy ? 'Выполняем…' : control.id === 'voice-studio-account-approve' ? 'Разрешить Studio' : 'Отозвать разрешение'; if (busy) control.setAttribute('aria-busy', 'true'); else control.removeAttribute('aria-busy'); }
   }
 }
@@ -250,6 +250,62 @@ async function changeStudioAccount(button, email) {
     catch (error) { if (error.code !== 'session_changed' && generation === state.generation) feedback('voice-studio-account-feedback', error.message, true); }
   }); } finally { if (generation === state.generation) state.voiceStudioAccountPending = ''; syncVoiceStudioAccountControls(); syncVoiceDelegationControls(); }
 }
+const diagnosticStates = { connecting: 'Подключается', ready: 'Соединение готово', closed: 'Соединение завершено', error: 'Ошибка соединения' };
+const diagnosticCodes = { idle:'Ожидание', connecting:'Подключение', ready:'Готово', closed:'Соединение закрыто', cancelled:'Соединение отменено', configuration_required:'Нужна настройка', unsupported_endpoint:'Адрес не поддерживается', device_protocol_invalid:'Ошибка протокола устройства', codec_failed:'Ошибка обработки аудио', input_backpressure:'Перегрузка входящего потока', output_backpressure:'Перегрузка исходящего потока', authentication_required:'Ошибка авторизации', quota_or_rate_limit:'Лимит провайдера', provider_error:'Ошибка провайдера', provider_protocol_invalid:'Ошибка протокола провайдера', network_error:'Ошибка сети', tls_failed:'Ошибка TLS', timeout:'Время ожидания истекло', listening:'Шлюз ожидает устройство', connected:'Устройство подключено', gateway_busy:'Шлюз занят', gateway_closed:'Шлюз остановлен', not_found:'Не найдено' };
+function diagnosticState(value) { return Object.hasOwn(diagnosticStates, value) ? diagnosticStates[value] : 'Состояние неизвестно'; }
+function diagnosticCode(code) { return Object.hasOwn(diagnosticCodes, code) ? `${diagnosticCodes[code]} · ${code}` : 'Код результата неизвестен'; }
+function clearDiagnosticResult() {
+  $('voice-diagnostics-result').hidden = true;
+  for (const id of ['voice-diagnostics-latest', 'voice-diagnostics-code', 'voice-diagnostics-active', 'voice-diagnostics-updated']) $(id).textContent = '';
+  $('voice-diagnostics-metrics').replaceChildren(); $('voice-diagnostics-events').replaceChildren();
+}
+function clearVoiceDiagnostics() {
+  state.diagnosticsVersion += 1; state.diagnosticsDeviceId = ''; state.diagnosticsPending = false;
+  $('voice-diagnostics').hidden = true; $('voice-diagnostics-device').replaceChildren(); $('voice-diagnostics-device').value = ''; $('voice-diagnostics-device').disabled = true;
+  $('voice-diagnostics-refresh').disabled = true; $('voice-diagnostics-refresh').textContent = 'Обновить диагностику'; $('voice-diagnostics-refresh').removeAttribute('aria-busy'); $('voice-diagnostics').setAttribute('aria-busy', 'false'); feedback('voice-diagnostics-feedback', ''); clearDiagnosticResult();
+}
+function selectDiagnosticDevice(id) {
+  state.diagnosticsVersion += 1; state.diagnosticsDeviceId = id; state.diagnosticsPending = false;
+  $('voice-diagnostics-device').value = id; $('voice-diagnostics-refresh').disabled = !id; $('voice-diagnostics-refresh').textContent = 'Обновить диагностику'; $('voice-diagnostics-refresh').removeAttribute('aria-busy'); $('voice-diagnostics').setAttribute('aria-busy', 'false'); clearDiagnosticResult();
+  feedback('voice-diagnostics-feedback', id ? 'Нажмите «Обновить диагностику», чтобы получить наблюдения сервера.' : 'Сначала привяжите свою Киби в разделе «Устройства».');
+}
+function syncVoiceDiagnostics() {
+  if (!state.authenticated || state.user?.role !== 'user' || state.diagnosticsSuspended) { clearVoiceDiagnostics(); return; }
+  const devices = Array.isArray(state.overview?.devices) ? state.overview.devices : [];
+  $('voice-diagnostics').hidden = false;
+  const selected = devices.some(device => device.id === state.diagnosticsDeviceId) ? state.diagnosticsDeviceId : devices[0]?.id || '';
+  const previous = state.diagnosticsDeviceId;
+  $('voice-diagnostics-device').replaceChildren();
+  if (!devices.length) { const option = node('option', '', 'Нет привязанных устройств'); option.value = ''; $('voice-diagnostics-device').append(option); }
+  for (const device of devices) { const option = node('option', '', device.name); option.value = device.id; $('voice-diagnostics-device').append(option); }
+  $('voice-diagnostics-device').disabled = !devices.length; $('voice-diagnostics-device').value = selected;
+  if (selected !== previous || !selected) selectDiagnosticDevice(selected);
+  else $('voice-diagnostics-refresh').disabled = state.diagnosticsPending;
+}
+function renderVoiceDiagnostics(data) {
+  clearDiagnosticResult();
+  if (!data || data.schemaVersion !== '1.0' || data.source !== 'server' || typeof data.observed !== 'boolean') throw new ApiError('server_error');
+  if (!data.observed) { feedback('voice-diagnostics-feedback', 'Наблюдений за последний час нет. Соединение могло ещё не пройти авторизацию, данные могли истечь или сервер был перезапущен.'); return; }
+  $('voice-diagnostics-latest').textContent = diagnosticState(data.connection?.state);
+  $('voice-diagnostics-code').textContent = diagnosticCode(data.connection?.code);
+  $('voice-diagnostics-active').textContent = data.connection?.active === true ? 'Сервер наблюдает активное соединение.' : data.connection?.active === false ? 'Это соединение сейчас не активно.' : 'Активность соединения неизвестна.';
+  $('voice-diagnostics-updated').textContent = `Последнее наблюдение: ${data.updatedAt ? formatDate(data.updatedAt) : 'время неизвестно'}`;
+  const metrics = [['inputPackets','Входящие аудиопакеты'],['inputPcmBytes','Входящий PCM, байт'],['droppedInputPackets','Пропущенные входящие пакеты'],['outputPackets','Исходящие аудиопакеты'],['outputPcmBytes','Исходящий PCM, байт'],['turnsCompleted','Завершённые ответы'],['playbackRejections','Отклонения воспроизведения']];
+  for (const [key, label] of metrics) { const row = node('div'); const value = data.metrics?.[key]; row.append(node('dt', '', label), node('dd', '', Number.isSafeInteger(value) && value >= 0 ? String(value) : '—')); $('voice-diagnostics-metrics').append(row); }
+  for (const event of Array.isArray(data.events) ? data.events.slice(-32) : []) { const row = node('li'); const time = node('time', '', event.at ? formatDate(event.at, true) : 'Время неизвестно'); if (event.at && Number.isFinite(Date.parse(event.at))) time.dateTime = event.at; row.append(time, node('strong', '', diagnosticState(event.state)), node('span', '', diagnosticCode(event.code))); $('voice-diagnostics-events').append(row); }
+  if (!$('voice-diagnostics-events').children.length) $('voice-diagnostics-events').append(node('li', '', 'Изменения состояния не зафиксированы.'));
+  $('voice-diagnostics-result').hidden = false; feedback('voice-diagnostics-feedback', 'Наблюдения сервера получены. Новые данные появятся после ручного обновления.');
+}
+async function loadVoiceDiagnostics() {
+  const deviceId = state.diagnosticsDeviceId, generation = state.generation;
+  if (!state.authenticated || state.user?.role !== 'user' || state.diagnosticsSuspended || !deviceId || state.diagnosticsPending || !state.overview?.devices?.some(device => device.id === deviceId)) return;
+  const version = ++state.diagnosticsVersion;
+  const current = () => state.authenticated && !state.diagnosticsSuspended && state.user?.role === 'user' && generation === state.generation && version === state.diagnosticsVersion && deviceId === state.diagnosticsDeviceId && state.overview?.devices?.some(device => device.id === deviceId);
+  state.diagnosticsPending = true; clearDiagnosticResult(); $('voice-diagnostics-refresh').disabled = true; $('voice-diagnostics-refresh').textContent = 'Обновляем диагностику…'; $('voice-diagnostics-refresh').setAttribute('aria-busy', 'true'); $('voice-diagnostics').setAttribute('aria-busy', 'true'); feedback('voice-diagnostics-feedback', 'Получаем наблюдения сервера…');
+  try { const data = await api(`/api/devices/${encodeURIComponent(deviceId)}/voice-diagnostics`); if (current()) renderVoiceDiagnostics(data); }
+  catch (error) { if (error.code !== 'session_changed' && current()) { clearDiagnosticResult(); feedback('voice-diagnostics-feedback', error.message, true); } }
+  finally { if (current()) { state.diagnosticsPending = false; $('voice-diagnostics-refresh').disabled = false; $('voice-diagnostics-refresh').textContent = 'Обновить диагностику'; $('voice-diagnostics-refresh').removeAttribute('aria-busy'); $('voice-diagnostics').setAttribute('aria-busy', 'false'); } }
+}
 function duration(seconds) { seconds = Math.max(0, Math.floor(Number(seconds) || 0)); const days = Math.floor(seconds / 86400); const hours = Math.floor(seconds / 3600) % 24; const minutes = Math.floor(seconds / 60) % 60; if (days) return `${days} д ${hours} ч`; if (hours) return `${hours} ч ${minutes} м`; return `${minutes} мин`; }
 function empty(title, text, buttonText, callback) { const el = node('div', 'empty-state'); el.append(node('span', 'empty-glyph', '↳'), node('h3', '', title), node('p', '', text)); el.firstChild.setAttribute('aria-hidden', 'true'); if (buttonText) el.append(action(buttonText, 'text-button', callback)); return el; }
 function renderOverview() {
@@ -257,7 +313,7 @@ function renderOverview() {
   const ready = data.server.status === 'ready'; $('server-status').textContent = ready ? 'Готов к работе' : 'Проверьте состояние';
   $('server-detail').textContent = `Версия ${data.server.version} · ${ready ? 'Доступен · модули настраиваются отдельно' : 'Сервер сообщил о проблеме'}`;
   $('footer-version').textContent = data.server.version; $('device-count').textContent = data.devices.length; $('event-count').textContent = data.events.length; $('uptime').textContent = duration(data.server.uptimeSeconds);
-  renderEvents(data.events); renderDevices(data.devices); renderModuleSummary(data.modules);
+  renderEvents(data.events); renderDevices(data.devices); syncVoiceDiagnostics(); renderModuleSummary(data.modules);
 }
 function renderEvents(events) {
   const list = $('event-list'); list.setAttribute('aria-busy', 'false'); list.replaceChildren();
@@ -276,7 +332,7 @@ function renderModuleSummary(modules) {
   const container = $('module-summary-list'); container.replaceChildren();
   for (const module of modules) { const row = node('div', 'summary-row'); const names = { notifications: 'Уведомления', telegram: 'Telegram', ai: 'Текстовый ИИ', voice: 'Голосовой ИИ', schedules: 'Расписания' }; let status = module.status === 'ready' ? 'Работает' : module.status === 'configured' ? 'Настроен' : module.status === 'planned' ? 'В планах' : 'Не настроен'; let ready = module.status === 'ready'; const setting = state.settings?.[module.id]; if (setting) { status = setting.configured ? (setting.enabled ? 'Включён' : 'Выключен') : 'Не настроен'; ready = setting.configured && setting.enabled; } if (module.id === 'voice') { const voice = setting || module; status = voiceLabel(voice); ready = (state.user?.role === 'owner' || voice.delegated === true) && ['active','listening'].includes(voice.status); } row.append(node('span', '', names[module.id] || module.name), node('span', `summary-state${ready ? ' ready' : ''}`, status)); container.append(row); }
 }
-function voiceLabel(voice) { if (!voice || (state.user?.role !== 'owner' && voice.delegated !== true) || voice.code === 'tenant_voice_unavailable') return 'Пока недоступен'; return ({disabled:'Выключен',not_configured:'Нужна настройка',listening:'Ожидает Киби',connecting:'Подключается',active:'Разговор идёт',error:'Нужна настройка',closed:'Остановлен'})[voice.status] || 'Недоступен'; }
+function voiceLabel(voice) { if (state.user?.role === 'owner' && voice?.activityVisibility === 'service_only') return ({disabled:'Выключен',not_configured:'Нужна настройка',listening:'Шлюз запущен',closed:'Остановлен',error:'Ошибка службы'})[voice.status] || 'Состояние службы'; if (!voice || (state.user?.role !== 'owner' && voice.delegated !== true) || voice.code === 'tenant_voice_unavailable') return 'Пока недоступен'; return ({disabled:'Выключен',not_configured:'Нужна настройка',listening:'Ожидает Киби',connecting:'Подключается',active:'Разговор идёт',error:'Нужна настройка',closed:'Остановлен'})[voice.status] || 'Недоступен'; }
 function renderVoice(voice) {
   $('voice-delegated-device').hidden = true; $('voice-delegated-device').textContent = '';
   $('voice-studio-eligibility').hidden = true; $('voice-studio-eligibility').textContent = '';
@@ -308,14 +364,15 @@ function renderVoice(voice) {
   const details = { disabled:'Голос выключен в настройках запуска сервера. Для включения следуйте docs/VOICE.md.', tls_required:'Не заданы приватные TLS-файлы голосового шлюза. Настройте их на сервере по docs/VOICE.md.', tls_failed:'TLS-файлы недоступны, небезопасны или сертификат не подходит. Проверьте их права, срок и соответствие ключу.', legacy_unavailable:'Хранилище совместимости со Studio недоступно. Проверьте установку на сервере.', gateway_unavailable:'Голосовой шлюз не запустился. Проверьте адрес, порт и настройки сервера.' };
   $('voice-detail').textContent = details[voice.code] || (voice.status === 'not_configured' ? 'Сохраните API-ключ OpenAI в модуле ИИ. Голос использует отдельную фиксированную модель gpt-realtime.' : voice.status === 'active' ? 'Киби подключена к голосовому шлюзу. Приём и воспроизведение звука проверяются на устройстве.' : voice.status === 'connecting' ? 'Киби устанавливает голосовое соединение. Дождитесь завершения подключения.' : 'TLS-шлюз запущен и ожидает устройство. Доступ к OpenAI и звук пока не подтверждены.');
   if(voice.provider==='xiaozhi') $('voice-detail').textContent = voice.configured ? (voice.status==='active'?'Разговор через Xiaozhi подключён. Звук проверяется на Киби.':'Выбран Xiaozhi. Платного переключения на OpenAI нет.') : 'Завершите привязку Xiaozhi и выберите один проект. OpenAI в этом режиме не используется.';
+  if (voice.activityVisibility === 'service_only') $('voice-detail').textContent = details[voice.code] || (voice.status === 'listening' ? 'TLS-шлюз запущен. Администратору доступно только состояние службы; активность личных кабинетов здесь не показывается.' : 'Показано состояние голосовой службы. Активность личных кабинетов здесь не показывается.');
   const registration=voice.registration;
   $('xiaozhi-status').textContent = 'Не подключён'; $('xiaozhi-pairing').textContent = '';
   if(registration){$('xiaozhi-status').textContent=registration.configured?'Аккаунт Xiaozhi привязан':registration.status==='pending'?'Ожидает привязку':registration.code?xiaozhiMessage(registration.code):'Не подключён';$('xiaozhi-pairing').textContent=registration.pairingCode?`Код устройства: ${registration.pairingCode}${registration.expiresAt?' · действует до '+new Date(registration.expiresAt).toLocaleTimeString('ru-RU'):''}`:'';}
   if(!$('voice-form').dataset.dirty){$('voice-provider').value=voice.provider||'openai';$('voice-scope-kind').value=voice.scope?.kind||'legacy';$('voice-scope-id').value=voice.scope?.id||'';}
   $('voice-provider').disabled=!!voice.providerLocked;
   $('voice-endpoint').textContent = voice.enabled ? `Адрес устройства: ${voice.endpoint}` : '';
-  $('voice-delegation-status').textContent = voice.delegation ? `Доступ выдан: кабинет ${voice.delegation.accountId} · Киби ${voice.delegation.deviceId}. Почта кабинета сервером не возвращается.` : 'Доступ личному кабинету не выдан.';
-  $('voice-studio-account-status').textContent = voice.studioAccountId ? `Самостоятельное подключение разрешено кабинету ${voice.studioAccountId}. Studio выбирает только его собственную привязанную Киби.` : 'Самостоятельное подключение голоса из Studio не разрешено ни одному кабинету.';
+  $('voice-delegation-status').textContent = voice.activityVisibility === 'service_only' || voice.delegation ? 'Голосовой доступ личному кабинету выдан. Его устройство и активность видны только в личном кабинете.' : 'Доступ личному кабинету не выдан.';
+  $('voice-studio-account-status').textContent = (voice.studioVoiceApproved ?? !!voice.studioAccountId) ? 'Самостоятельное подключение из Studio разрешено одному личному кабинету. Studio выбирает только его собственную привязанную Киби.' : 'Самостоятельное подключение голоса из Studio не разрешено ни одному кабинету.';
   syncVoiceDelegationControls();
   syncVoiceStudioAccountControls();
 }
@@ -395,6 +452,8 @@ window.addEventListener('hashchange', () => { if (state.authenticated) setSectio
 $('token-dialog').addEventListener('close', () => { $('device-token').value = ''; feedback('token-feedback', ''); });
 $('studio-dialog').addEventListener('close', clearStudioDialog);
 $('studio-dialog').addEventListener('cancel', clearStudioDialog);
+$('voice-diagnostics-device').addEventListener('change', () => { const id = $('voice-diagnostics-device').value; selectDiagnosticDevice(state.overview?.devices?.some(device => device.id === id) ? id : ''); });
+$('voice-diagnostics-refresh').addEventListener('click', loadVoiceDiagnostics);
 $('studio-connect').addEventListener('click', () => openStudioDialog());
 $('studio-issue').addEventListener('click', issueStudioLink);
 $('studio-connections-refresh').addEventListener('click', loadStudioConnections);
@@ -423,7 +482,7 @@ $('login-form').addEventListener('submit', (event) => {
   if (mode === 'register' && (password.length < 12 || password.length > 1024)) { feedback('login-error', errorMessages.invalid_registration, true); $('admin-password').setAttribute('aria-invalid', 'true'); $('admin-password').focus(); return; }
   pending(event.submitter, async () => { feedback('login-error', ''); $('admin-password').removeAttribute('aria-invalid'); $('auth-email').removeAttribute('aria-invalid'); try { const data = await api(mode === 'register' ? '/api/register' : '/api/login', { method: 'POST', body: mode === 'owner' ? { password } : { email, password } }); await enterApp(data, { registration: mode === 'register' }); if (state.authenticated && !$('studio-dialog').open) $('main').focus(); } catch (error) { if (error.code === 'session_changed') return; feedback('login-error', error.message, true); $('admin-password').setAttribute('aria-invalid', 'true'); if (mode !== 'owner') $('auth-email').setAttribute('aria-invalid', 'true'); $('admin-password').focus(); } });
 });
-$('logout').addEventListener('click', () => pending($('logout'), async () => { if ($('studio-dialog').open) closeDialog('studio-dialog'); else clearStudioDialog(); try { await api('/api/logout', { method: 'POST' }); showLogin(); (state.authMode === 'owner' ? $('admin-password') : $('auth-email')).focus(); } catch (error) { if (error.code === 'session_changed') return; if (state.authenticated) announce(error.message, true); } }));
+$('logout').addEventListener('click', () => pending($('logout'), async () => { state.diagnosticsSuspended = true; clearVoiceDiagnostics(); if ($('studio-dialog').open) closeDialog('studio-dialog'); else clearStudioDialog(); try { await api('/api/logout', { method: 'POST' }); showLogin(); (state.authMode === 'owner' ? $('admin-password') : $('auth-email')).focus(); } catch (error) { if (error.code === 'session_changed') return; if (state.authenticated) { state.diagnosticsSuspended = false; syncVoiceDiagnostics(); announce(error.message, true); } } }));
 $('device-form').addEventListener('submit', (event) => { event.preventDefault(); const name = $('device-name').value.trim(); if (!name) { feedback('device-feedback', 'Введите название устройства.', true); $('device-name').focus(); return; } pending(event.submitter, async () => { feedback('device-feedback', ''); try { const data = await api('/api/devices', { method: 'POST', body: { name } }); closeDialog('device-dialog'); $('device-form').reset(); $('device-token').value = data.token; openDialog('token-dialog'); $('copy-token').focus(); await refreshData(); } catch (error) { if (error.code === 'session_changed') return; feedback('device-feedback', error.message, true); } }); });
 $('message-form').addEventListener('submit', (event) => { event.preventDefault(); const title = $('message-title').value.trim(); if (!title) { feedback('message-feedback', 'Введите заголовок.', true); $('message-title').focus(); return; } const target = state.messageTarget; pending(event.submitter, async () => { feedback('message-feedback', ''); try { const data = await api(target === null ? '/api/events' : `/api/devices/${encodeURIComponent(target)}/messages`, { method: 'POST', body: { title, message: $('message-body').value } }); closeDialog('message-dialog'); $('message-form').reset(); if (target !== null) announce('Сообщение поставлено в очередь устройства. Подтверждение доставки пока не получено.'); else announce(data.event?.delivery === 'telegram_failed' ? 'Событие сохранено. Telegram не подтвердил доставку; проверьте настройки модуля.' : data.event?.delivery === 'telegram_sent' ? 'Событие сохранено и отправлено в Telegram.' : 'Событие сохранено на сервере.', data.event?.delivery === 'telegram_failed'); await refreshData(); } catch (error) { if (error.code === 'session_changed') return; feedback('message-feedback', error.message, true); } }); });
 $('confirm-action').addEventListener('click', () => pending($('confirm-action'), async () => { try { if (state.confirmAction) await state.confirmAction(); closeDialog('confirm-dialog'); } catch (error) { if (error.code === 'session_changed') return; feedback('confirm-feedback', error.message, true); } }));

@@ -102,6 +102,32 @@ function safeDevice(value, details = false) {
   return result;
 }
 
+// A standalone, closed diagnostic projection: never forward arbitrary server text.
+const diagnosticCodes = new Set(['idle', 'connecting', 'connected', 'ready', 'closed', 'cancelled', 'configuration_required', 'unsupported_endpoint', 'device_protocol_invalid', 'codec_failed', 'input_backpressure', 'output_backpressure', 'authentication_required', 'quota_or_rate_limit', 'provider_error', 'provider_protocol_invalid', 'network_error', 'tls_failed', 'timeout', 'gateway_busy', 'gateway_closed', 'not_found', 'listening']);
+const diagnosticMetrics = new Set(['inputPackets', 'inputPcmBytes', 'droppedInputPackets', 'outputPackets', 'outputPcmBytes', 'turnsCompleted', 'playbackRejections']);
+function safeDiagnostics(value) {
+  const invalid = () => { throw fail('account_invalid_response'); };
+  if (!exact(value, ['schemaVersion', 'source', 'retentionSeconds', 'observed', 'updatedAt', 'connection', 'metrics', 'events'])
+    || value.schemaVersion !== '1.0' || value.source !== 'server' || value.retentionSeconds !== 3600 || typeof value.observed !== 'boolean'
+    || !Array.isArray(value.events) || value.events.length > 32) invalid();
+  if (!value.observed) {
+    if (value.updatedAt !== null || value.connection !== null || value.metrics !== null || value.events.length !== 0) invalid();
+    return clone(value);
+  }
+  const stateFor = code => ['idle', 'connecting', 'connected', 'listening'].includes(code) ? 'connecting'
+    : code === 'ready' ? 'ready' : ['closed', 'cancelled', 'gateway_closed'].includes(code) ? 'closed' : 'error';
+  const validStage = stage => object(stage) && diagnosticCodes.has(stage.code) && stage.state === stateFor(stage.code);
+  if (!validTime(value.updatedAt) || !exact(value.connection, ['state', 'code', 'active']) || !validStage(value.connection) || value.connection.active !== ['connecting', 'ready'].includes(value.connection.state)) invalid();
+  if (value.metrics !== null) {
+    if (!object(value.metrics) || Object.keys(value.metrics).length === 0) invalid();
+    for (const [key, counter] of Object.entries(value.metrics)) {
+      if (!diagnosticMetrics.has(key) || !(Number.isSafeInteger(counter) && counter >= 0)) invalid();
+    }
+  }
+  for (const event of value.events) if (!exact(event, ['at', 'state', 'code']) || !validTime(event.at) || !validStage(event)) invalid();
+  return clone(value);
+}
+
 // The trusted local server supplies root/apiBase. No HTTP/MCP input changes them.
 export async function createStudioAccount({ root, apiBase = 'https://sldvkibi.ru/server/', fetchImpl = fetch, now = Date.now, timeoutMs = 15000 } = {}) {
   let base;
@@ -333,6 +359,10 @@ export async function createStudioAccount({ root, apiBase = 'https://sldvkibi.ru
         if (new Set(devices.map(device => device.id)).size !== devices.length) throw fail('account_invalid_response');
         return { devices };
       });
+    },
+    deviceDiagnostics(input) {
+      if (!exact(input, ['deviceId']) || !validId(input.deviceId)) return Promise.reject(fail('account_invalid_input', 400));
+      return authorized(`api/studio/devices/${input.deviceId}/voice-diagnostics`, {}, safeDiagnostics);
     },
     claimPairing(input) {
       if (!exact(input, ['code']) || typeof input.code !== 'string' || input.code.length > 32 || !/^[A-HJ-NP-Z2-9]{8}$/.test(input.code.replace(/[\s-]/g, '').toUpperCase())) return Promise.reject(fail('account_invalid_input', 400));

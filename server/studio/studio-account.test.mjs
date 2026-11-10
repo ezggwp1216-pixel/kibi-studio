@@ -354,3 +354,68 @@ test('linked roots and permissive private parents are rejected before writing th
   await assert.rejects(createStudioAccount({ root: target }), { code: 'account_storage_error' });
   assert.deepEqual(await readdir(parent), []);
 });
+
+const emptyDiagnostics = () => ({ schemaVersion: '1.0', source: 'server', retentionSeconds: 3600, observed: false, updatedAt: null, connection: null, metrics: null, events: [] });
+const observedDiagnostics = () => ({ ...emptyDiagnostics(), observed: true, updatedAt: connection.createdAt,
+  connection: { state: 'ready', code: 'ready', active: true }, metrics: { inputPackets: 2 }, events: [{ at: connection.createdAt, state: 'ready', code: 'ready' }] });
+
+test('device diagnostics uses only the fixed scoped GET and preserves honest empty and partial measurements', async t => {
+  const deviceId = randomUUID(); let reply = emptyDiagnostics();
+  const { client, calls } = await fixture(t, url => String(url).endsWith('/redeem') ? json(grant(), 201) : json(reply));
+  await client.connect({ code, label: 'Studio' });
+  assert.deepEqual(await client.deviceDiagnostics({ deviceId }), emptyDiagnostics());
+  assert.equal(calls.at(-1).url, base + `api/studio/devices/${deviceId}/voice-diagnostics`);
+  assert.equal(calls.at(-1).method, 'GET');
+  assert.equal(calls.at(-1).headers.Authorization, 'Bearer ' + token);
+  assert.equal(calls.at(-1).body, undefined);
+  assert.deepEqual(client.publicInfo().scopes, scopes);
+  reply = observedDiagnostics(); reply.metrics.outputPackets = Number.MAX_SAFE_INTEGER; reply.events = [];
+  assert.deepEqual(await client.deviceDiagnostics({ deviceId }), reply);
+  assert.equal(calls.length, 3, 'only redemption and two diagnostic reads; no activation/provider request');
+  assert.equal(JSON.stringify(await client.deviceDiagnostics({ deviceId })).includes(token), false);
+  for (const input of [null, {}, { deviceId: '../owner' }, { deviceId, ownerId: account.id }, { deviceId, apiBase: 'https://example.test/' }])
+    await assert.rejects(client.deviceDiagnostics(input), { code: 'account_invalid_input' });
+  assert.equal(calls.length, 4);
+});
+
+test('diagnostics rejects unknown fields, arbitrary codes, counters and inconsistent DTOs without leaking server content', async t => {
+  let reply;
+  const { client } = await fixture(t, url => String(url).endsWith('/redeem') ? json(grant(), 201) : json(reply));
+  await client.connect({ code, label: 'Studio' });
+  const corruptions = [
+    dto => { dto.token = token; }, dto => { dto.source = token; }, dto => { dto.schemaVersion = '2.0'; },
+    dto => { dto.retentionSeconds = 3601; }, dto => { dto.updatedAt = 'yesterday'; },
+    dto => { dto.connection.apiKey = token; }, dto => { dto.connection.code = token; }, dto => { dto.connection.state = token; },
+    dto => { dto.connection.active = 'yes'; }, dto => { dto.metrics.privatePayload = token; },
+    dto => { dto.metrics = {}; }, dto => { dto.metrics.inputPackets = null; }, dto => { dto.connection.active = false; }, dto => { dto.events[0].state = 'closed'; },
+    dto => { dto.metrics.inputPackets = -1; }, dto => { dto.metrics.inputPackets = 1.5; }, dto => { dto.metrics.inputPackets = Number.MAX_SAFE_INTEGER + 1; },
+    dto => { dto.events[0].message = token; }, dto => { dto.events[0].at = token; }, dto => { dto.events[0].code = token; },
+    dto => { dto.events = Array.from({ length: 33 }, () => dto.events[0]); }, dto => { dto.observed = false; },
+    dto => { dto.connection = null; }, dto => { delete dto.updatedAt; },
+  ];
+  for (const corrupt of corruptions) {
+    reply = observedDiagnostics(); corrupt(reply);
+    await assert.rejects(client.deviceDiagnostics({ deviceId: randomUUID() }), error => error.code === 'account_invalid_response' && !error.message.includes(token) && !JSON.stringify(error).includes(token));
+  }
+});
+
+test('diagnostic reads cannot outlive disconnection, account replacement or revocation', async t => {
+  for (const action of ['disconnect', 'connect', 'revoke', 'expire']) {
+    let enter, resolve, redemptions = 0;
+    const entered = new Promise(done => { enter = done; });
+    const { client, advance } = await fixture(t, url => {
+      if (String(url).endsWith('/redeem')) return json(++redemptions === 1 ? grant() : grant({ token: alternateToken, account: { ...account, id: randomUUID() }, connection: { ...connection, id: randomUUID() } }), 201);
+      if (String(url).endsWith('/voice-diagnostics')) { enter(); return new Promise(done => { resolve = done; }); }
+      if (String(url).endsWith('/profile')) return json({ ok: false, code: token }, 401);
+      return json({ ok: true });
+    });
+    await client.connect({ code, label: 'Studio' });
+    const pending = client.deviceDiagnostics({ deviceId: randomUUID() }); pending.catch(() => {}); await entered;
+    if (action === 'disconnect') await client.disconnect();
+    else if (action === 'connect') await client.connect({ code, label: 'Replacement' });
+    else if (action === 'revoke') await assert.rejects(client.refresh(), { code: 'account_revoked' });
+    else { advance(90 * 24 * 60 * 60 * 1000); assert.equal(client.publicInfo().status, 'expired'); }
+    resolve(json(observedDiagnostics()));
+    await assert.rejects(pending, { code: 'account_session_changed' });
+  }
+});

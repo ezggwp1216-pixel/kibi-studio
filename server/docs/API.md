@@ -12,6 +12,7 @@ All JSON is UTF-8. Panel mutations require the configured exact `Origin`, the Ht
 | GET /api/overview | admin | `{server:{status:"ready",version,uptimeSeconds},devices:[],events:[],modules:[]}` |
 | POST /api/devices | `{name}` (1–64 chars) | `{device:{id,name,createdAt,lastSeenAt,status},token}` token displayed once |
 | DELETE /api/devices/:id | none | `{ok:true}` revokes the token |
+| GET /api/devices/:id/voice-diagnostics | ordinary user session, own existing device | direct server diagnostics DTO below; no provider request |
 | POST /api/devices/:id/messages | `{title,message}` | `{ok:true,messageId}` |
 | POST /api/events | `{title,message}` | `{ok:true,event}` local test event; may notify Telegram only when enabled |
 | GET /api/settings | admin | `{telegram:{configured,enabled},ai:{configured,enabled,provider:"openai",model,systemPrompt},voice:{configured,enabled,status,code,model,endpoint,tls,legacyConfigured,legacyReady,activeSessions}}` no keys/chat ID/private paths |
@@ -132,6 +133,7 @@ the cabinet. Login never generates a code automatically.
 | POST /api/studio/redeem | no cookie authority; `{code,label}` | 201 `{token,connection,account,apiBase,scopes}`; code consumed once |
 | GET /api/studio/profile | Studio bearer | `{account,connection,scopes,voice,voiceEligibility}` |
 | GET /api/studio/devices | Studio bearer | `{devices}`; safe own devices only |
+| GET /api/studio/devices/:id/voice-diagnostics | Studio bearer with existing `voice.status`, own existing device | same direct server diagnostics DTO as the cabinet |
 | POST /api/studio/pairing/claim | Studio bearer, `{code}` | `{ok:true,device}`; no device token |
 | POST /api/studio/voice/activate | Studio bearer, `{deviceId}` | `{ok:true,voice}`; separate owner approval and device ownership required |
 | DELETE /api/studio/session | Studio bearer | `{ok:true}`; revokes only this connection |
@@ -146,6 +148,65 @@ are persisted on the server. Studio keeps its dedicated token in its private
 local file with mode 0600; tokens are never sent to the model or embedded in
 firmware. Revoking a Studio connection does not revoke the independently paired
 device; delete that device to revoke its own credential.
+
+## Private device voice diagnostics
+
+Both diagnostics GET routes return the following exact schema directly, without
+an `ok` or `diagnostics` wrapper. An existing device without a recent authenticated
+server observation returns 200 with this truthful empty state, including when
+voice is unavailable:
+
+```json
+{"schemaVersion":"1.0","source":"server","retentionSeconds":3600,"observed":false,"updatedAt":null,"connection":null,"metrics":null,"events":[]}
+```
+
+For `observed:true`, `updatedAt` is a canonical ISO timestamp and `connection` is
+`{state,code,active}`. States are `connecting`, `ready`, `closed`, `error`.
+`metrics` is null or a nonempty partial object containing only safe integer
+counters in `0..Number.MAX_SAFE_INTEGER`: `inputPackets`, `inputPcmBytes`,
+`droppedInputPackets`, `outputPackets`, `outputPcmBytes`, `turnsCompleted`,
+`playbackRejections`. Unmeasured counters are absent, never invented zeroes or
+per-key nulls. `events` contains at most 32 `{at,state,code}` state transitions;
+`at` is a canonical ISO timestamp. It may be empty after older transitions expire.
+
+Allowed codes are `idle`, `connecting`, `connected`, `ready`, `closed`,
+`cancelled`, `configuration_required`, `unsupported_endpoint`,
+`device_protocol_invalid`, `codec_failed`, `input_backpressure`,
+`output_backpressure`, `authentication_required`, `quota_or_rate_limit`,
+`provider_error`, `provider_protocol_invalid`, `network_error`, `tls_failed`,
+`timeout`, `gateway_busy`, `gateway_closed`, `not_found`, `listening`.
+`idle`/`connecting`/`connected`/`listening` map to `connecting` with `active:true`;
+`ready` maps to `ready` with `active:true`;
+`closed`/`cancelled`/`gateway_closed` map to `closed` with `active:false`;
+all other allowed codes map to `error` with `active:false`.
+
+Identity comes only from the trusted ordinary session or scoped Studio bearer.
+Query parameters, request bodies and device IDs cannot select another account.
+The panel endpoint returns 403 `user_diagnostics_only` for the owner and 401
+`unauthorized` without a current ordinary session. The Studio endpoint requires
+its bearer even if a panel cookie is present; invalid, expired or revoked bearer
+returns 401 `studio_unauthorized`. Both endpoints check current device membership
+after asynchronous account resolution: unknown, foreign and deleted/revoked
+devices return 404 `device_not_found`. Duplicate IDs in different accounts remain
+separate. These reads grant no voice activation or provider permission. Responses
+use `Cache-Control: no-store`; refresh performs no external request or Telegram send.
+
+Records exist only in memory: one-hour retention, at most 512 device records
+globally with oldest-record eviction, cleared on process restart. Live counter
+updates are sampled at most once a second; state changes and final closure are
+immediate. No speech, audio, raw provider payloads, exception messages, session or
+response IDs, secrets, settings or private paths are returned or written to disk,
+console or the event/Telegram feed by diagnostics.
+
+The ordinary user sees only their own observations. When an ordinary user's
+delegated pilot is selected, owner voice profiles expose service state only:
+`activityVisibility:"service_only"`, `activeSessions:null`, null
+`scope`/`delegation`/`studioAccountId`, and `studioVoiceApproved` as a boolean.
+They reveal no user's activity, counters or session failure codes. This is cabinet
+access isolation; it does not prevent a VPS operator with root access from
+inspecting the running server. Server observations cannot establish failures
+before device authentication, microphone quality or physical playback, and do
+not imply firmware telemetry or USB access. See [voice limitations](VOICE.md).
 
 ## Shared Xiaozhi pilot permission
 

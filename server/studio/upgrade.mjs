@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
-const RELEASE = 'studio-platform-2026-11-10';
+const RELEASE = 'studio-platform-2026-11-10-user-diagnostics';
 const DEFAULT_SOURCE = fileURLToPath(new URL('../', import.meta.url));
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -78,6 +78,17 @@ const PAYLOADS = Object.freeze([
   ...['studio-account.js', 'studio-account.css'].map(name => ({ source: `studio/${name}`, target: `web/${name}` })),
   ...['API.md', 'VOICE.md', 'HARDWARE.md', 'SERVICES.md'].map(name => ({ source: `docs/${name}`, target: `src/platform-guides/${name}` })),
 ]);
+
+// Only these exact previously shipped public payloads may be replaced. An
+// unknown local edit is preserved and rejected, just like an unknown core file.
+const PREVIOUS_PAYLOADS=Object.freeze({
+ 'src/studio-platform.mjs':'a2644ad1de584919fa365429953a5ddcb9f1d28157fbb0f7f73e55dca507b21c',
+ 'src/studio-account.mjs':'6e050e988503f28e4faf9e22a64894f76f31d44592d0d2a5b68ac3910b6b2bf4',
+ 'web/studio-account.js':'701d53b678828b12406e6d6364bcac9cc50b70b3dab0fd1f5c8bfd1bac1d408e',
+ 'web/studio-account.css':'92f65254576822a056b4af72e13adf2721ea412c8109f608e6cb0cf6ccba5379',
+ 'src/platform-guides/API.md':'11f0616682535406e40b58de9390f553fafc2b44db466a8deedc0f22614140f0',
+ 'src/platform-guides/VOICE.md':'a1b2ead5217a8543eee549dda305af02ee120a81368064348fdd078279845637',
+});
 
 async function unlinkedPath(input) {
   let path = resolve(input);
@@ -162,9 +173,9 @@ export async function upgradeStudio({ root, sourceRoot = DEFAULT_SOURCE, apply =
     if ((payloadBytes += input.bytes.length) > 8 * 1024 * 1024) throw failure('upgrade_payload_limit');
     checkSyntax(payload.target, input.bytes);
     const before = await readProgram(target, payload.target, true);
-    if (before && before.sha256 !== input.sha256) throw failure('upgrade_existing_file_conflict', payload.target);
+    if (before && before.sha256 !== input.sha256 && before.sha256 !== PREVIOUS_PAYLOADS[payload.target]) throw failure('upgrade_existing_file_conflict', payload.target);
     const entry = { path: payload.target, before, bytes: input.bytes, afterSha256: input.sha256, mode: before?.mode ?? 0o644 };
-    (before ? prerequisites : entries).push(entry);
+    (before?.sha256 === input.sha256 ? prerequisites : entries).push(entry);
   }
   const changes = entries.map(entry => ({ path: entry.path, action: entry.before ? 'patch' : 'create', beforeSha256: entry.before?.sha256 ?? null, afterSha256: entry.afterSha256 }));
   const report = { ok: true, release: RELEASE, mode: entries.length ? (apply ? 'applied' : 'dry-run') : 'already-current', changes, backupDir: null };

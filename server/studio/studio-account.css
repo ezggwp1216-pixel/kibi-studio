@@ -51,3 +51,12 @@
 .ksa-dialog :disabled{opacity:.55;cursor:wait}
 @media(max-width:420px){.ksa-dialog{padding:20px;width:calc(100vw - 20px);max-height:calc(100svh - 20px)}.ksa-dialog h2{font-size:1.3rem}.ksa-inline{display:grid}.ksa-inline button,.ksa-form button{width:100%;justify-self:stretch}.ksa-devices li{display:grid;gap:3px}.ksa-account-button{font-size:.8125rem;padding:.5rem .7rem}}
 @media(forced-colors:active){.ksa-account-button::before{forced-color-adjust:none;background:Canvas}.ksa-account-button.ksa-is-connected::before{background:CanvasText}.ksa-feedback:not(:empty){border:1px solid CanvasText}}
+.ksa-diagnostics{margin-top:24px;padding-top:20px;border-top:1px solid #454545}
+.ksa-diagnostics>p{margin:8px 0}
+.ksa-diagnostics .ksa-form{margin-top:12px}
+.ksa-diagnostic-metrics{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 16px;margin:12px 0;font-size:.8125rem}
+.ksa-diagnostic-metrics:empty,.ksa-diagnostic-events:empty{display:none}
+.ksa-diagnostic-metrics dt{color:#b4b4b4;overflow-wrap:anywhere}
+.ksa-diagnostic-metrics dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.ksa-diagnostic-events{max-height:220px;overflow:auto;margin:14px 0 0;padding-left:22px;font-size:.75rem;color:#b4b4b4}
+.ksa-diagnostic-events li{padding:5px 0;overflow-wrap:anywhere}

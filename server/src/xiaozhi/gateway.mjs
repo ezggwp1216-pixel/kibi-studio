@@ -1,5 +1,7 @@
 import https from 'node:https';
 import {isIP} from 'node:net';
+import {randomUUID} from 'node:crypto';
+import {sanitizeVoiceDiagnosticMetrics} from '../voice-diagnostics.mjs';
 import {WebSocketServer,WebSocket} from '../../resources/xiaozhi/network/ws-8.22.1/wrapper.mjs';
 import {createXiaozhiOpenAIAdapter} from './adapter.mjs';
 
@@ -14,7 +16,7 @@ function bucket(capacity,perSecond){let tokens=capacity,at=Date.now();return cos
  * authorize owns capability comparison and current project/configuration identity checks.
  * It receives only {token}; configuration and cancellation never come from device JSON.
  */
-export function createXiaozhiGateway({tls,host='127.0.0.1',port=0,authorize,createAdapter=createXiaozhiOpenAIAdapter,onStatus}={}){
+export function createXiaozhiGateway({tls,host='127.0.0.1',port=0,authorize,createAdapter=createXiaozhiOpenAIAdapter,onStatus,onDiagnostics}={}){
  if(!tls||(!Buffer.isBuffer(tls.key)&&typeof tls.key!=='string')||!tls.key.length||(!Buffer.isBuffer(tls.cert)&&typeof tls.cert!=='string')||!tls.cert.length)throw new Error('gateway_tls_required');
  if(typeof authorize!=='function'||typeof createAdapter!=='function'||typeof host!=='string'||(!isIP(host)&&host!=='localhost')||!Number.isInteger(port)||port<0||port>65535)throw new Error('gateway_input_invalid');
  // Deliberately select only key/cert: callers cannot weaken TLS or inject filesystem paths/options.
@@ -29,12 +31,26 @@ export function createXiaozhiGateway({tls,host='127.0.0.1',port=0,authorize,crea
  const snapshot=()=>({kind:'xiaozhi-gateway',code:current?.code??lastCode,metrics:{...totals,connections:sockets.size,activeSessions:current?.ws&&!current.ended?1:0,pendingAuthorization:authorizations.size,inputQueueMessages:current?.inCount??0,inputQueueBytes:current?.inBytes??0,outputQueueMessages:current?.outCount??0,outputQueueBytes:current?.outBytes??0}});
  const publish=()=>{try{onStatus?.(snapshot());}catch{/* Diagnostics never control device/session lifecycle. */}};
  const emit=code=>{lastCode=codes.has(code)?code:'network_error';publish();};
+ function diagnostic(context,event='status',report){
+  if(typeof onDiagnostics!=='function'||!context?.diagnosticPrincipal)return;
+  try{
+   const observed=report||context.adapter?.snapshot?.()||{};
+   const result=onDiagnostics({principal:{...context.diagnosticPrincipal},sessionId:context.diagnosticId,event,code:codes.has(observed.code)?observed.code:context.code,metrics:sanitizeVoiceDiagnosticMetrics(observed.metrics)});
+   Promise.resolve(result).catch(()=>{});
+  }catch{/* Observations never control a socket or resource lifetime. */}
+ }
+ function diagnosticProgress(context){
+  if(!context||context.ended||context.diagnosticTimer||!context.diagnosticPrincipal||typeof onDiagnostics!=='function')return;
+  context.diagnosticTimer=setTimeout(()=>{context.diagnosticTimer=null;if(!context.ended)diagnostic(context);},1000);context.diagnosticTimer.unref?.();
+ }
  // One coalesced update per 250 ms, including the trailing drain. State changes
  // remain immediate; traffic progress never substitutes a different state code.
- const progress=()=>{if(progressTimer||closing||!current||current.ended)return;progressTimer=setTimeout(()=>{progressTimer=null;publish();},250);progressTimer.unref?.();};
+ const progress=()=>{if(progressTimer||closing||!current||current.ended)return;progressTimer=setTimeout(()=>{progressTimer=null;publish();diagnosticProgress(current);},250);progressTimer.unref?.();};
  function retire(adapter){if(!adapter)return Promise.resolve();let promise;try{promise=Promise.resolve(adapter.close());}catch{promise=Promise.resolve();}const bounded=Promise.race([promise.catch(()=>{}),new Promise(resolve=>{const timer=setTimeout(resolve,1000);timer.unref?.();promise.finally(()=>clearTimeout(timer)).catch(()=>{});})]);retirements.add(bounded);bounded.finally(()=>retirements.delete(bounded));return bounded;}
  function end(context,code='closed'){
-  if(context.ended)return;context.ended=true;context.life.abort();clearTimeout(progressTimer);progressTimer=null;clearTimeout(context.authTimer);clearTimeout(context.readyTimer);clearInterval(context.heartbeat);context.ownerSignal?.removeEventListener('abort',context.ownerAbort);
+  if(context.ended)return;context.ended=true;clearTimeout(context.diagnosticTimer);context.diagnosticTimer=null;
+  let metrics;try{metrics=context.adapter?.snapshot?.()?.metrics;}catch{}diagnostic(context,'end',{code,metrics});
+  context.life.abort();clearTimeout(progressTimer);progressTimer=null;clearTimeout(context.authTimer);clearTimeout(context.readyTimer);clearInterval(context.heartbeat);context.ownerSignal?.removeEventListener('abort',context.ownerAbort);
   for(const cancel of [...context.operations])cancel();context.operations.clear();for(const item of context.output.splice(0))item.reject(failure(code));context.input.length=0;context.inBytes=0;context.inCount=0;context.outBytes=0;context.outCount=0;
   context.ws?.terminate();context.socket.destroy();if(current===context)current=null;void retire(context.adapter);context.adapter=null;emit(code);
  }
@@ -67,7 +83,7 @@ export function createXiaozhiGateway({tls,host='127.0.0.1',port=0,authorize,crea
  }
  function connected(context,ws,configuration,ownerSignal){
   if(context.ended||closing){ws.terminate();return;}context.ws=ws;context.socket.setTimeout(0);context.ownerSignal=ownerSignal;context.ownerAbort=()=>end(context,'cancelled');ownerSignal?.addEventListener('abort',context.ownerAbort,{once:true});if(ownerSignal?.aborted){end(context,'cancelled');return;}
-  context.code='connected';emit('connected');context.readyTimer=setTimeout(()=>end(context,'timeout'),15000);let seenAt=Date.now();
+  context.code='connected';emit('connected');diagnostic(context,'status',{code:'connected'});context.readyTimer=setTimeout(()=>end(context,'timeout'),15000);let seenAt=Date.now();
   ws.on('message',(payload,binary)=>{
    if(context.ended)return;seenAt=Date.now();if(binary&&(!payload.length||payload.length>OPUS_LIMIT)||!binary&&payload.length>JSON_LIMIT){end(context,'device_protocol_invalid');return;}
    if(!context.inputRate(1)||!context.inputBytesRate(payload.length)||context.inCount>=QUEUE_MESSAGES||context.inBytes+payload.length>QUEUE_BYTES){end(context,'input_backpressure');return;}
@@ -77,7 +93,7 @@ export function createXiaozhiGateway({tls,host='127.0.0.1',port=0,authorize,crea
   ws.on('ping',payload=>{if(!context.controlRate(1)||context.socket.writableLength+ws.bufferedAmount>QUEUE_BYTES){end(context,'input_backpressure');return;}seenAt=Date.now();void bounded(context,new Promise((resolve,reject)=>ws.pong(payload,undefined,error=>error?reject(failure('network_error')):resolve())),5000).catch(()=>end(context,'network_error'));});
   ws.on('error',()=>end(context,'device_protocol_invalid'));ws.once('close',()=>end(context,'closed'));
   context.heartbeat=setInterval(()=>{if(Date.now()-seenAt>45000){end(context,'timeout');return;}if(context.socket.writableLength+ws.bufferedAmount>QUEUE_BYTES){end(context,'output_backpressure');return;}void bounded(context,new Promise((resolve,reject)=>ws.ping(undefined,undefined,error=>error?reject(failure('network_error')):resolve())),5000).catch(()=>end(context,'network_error'));},15000);context.heartbeat.unref?.();
-  let creating;try{creating=Promise.resolve(createAdapter({configuration,signal:context.life.signal,sendDevice:(payload,options)=>sendDevice(context,payload,options),onStatus:report=>{if(context.ended)return;const code=coreCodes.has(report?.code)?report.code:'provider_error';context.code=code;if(code==='ready')clearTimeout(context.readyTimer);emit(code);if(report?.closed||!['idle','connecting','ready'].includes(code))end(context,code);}}));}catch{end(context,'provider_error');return;}
+  let creating;try{creating=Promise.resolve(createAdapter({configuration,signal:context.life.signal,sendDevice:(payload,options)=>sendDevice(context,payload,options),onStatus:report=>{if(context.ended)return;const code=coreCodes.has(report?.code)?report.code:'provider_error';context.code=code;if(code==='ready')clearTimeout(context.readyTimer);emit(code);diagnostic(context,'status',{code,metrics:report?.metrics});if(report?.closed||!['idle','connecting','ready'].includes(code))end(context,code);}}));}catch{end(context,'provider_error');return;}
   creations.add(creating);context.adapterReady=creating.then(adapter=>{creations.delete(creating);if(!adapter||typeof adapter.receiveDevice!=='function'||typeof adapter.close!=='function'){end(context,'provider_error');throw failure('provider_error');}if(context.ended){void retire(adapter);throw failure('closed');}context.adapter=adapter;return adapter;},()=>{creations.delete(creating);end(context,'provider_error');throw failure('provider_error');});context.adapterReady.catch(()=>{});
  }
  server.on('connection',socket=>{if(closing||sockets.size>=4||!connectionRate(1)){totals.rejectedConnections=count(totals.rejectedConnections);socket.destroy();emit('gateway_busy');return;}sockets.add(socket);socket.once('close',()=>sockets.delete(socket));socket.on('error',()=>{});});
@@ -92,6 +108,7 @@ export function createXiaozhiGateway({tls,host='127.0.0.1',port=0,authorize,crea
   let pending;try{pending=Promise.resolve(authorize({token:match[1]}));}catch{pending=Promise.resolve(null);}authorizations.add(pending);emit('connecting');let permission;
   try{permission=await pending;}catch{permission=null;}finally{authorizations.delete(pending);clearTimeout(context.authTimer);}
   if(context.ended||closing)return;if(!permission||!permission.configuration||typeof permission.configuration!=='object'||permission.signal?.aborted){reject(socket,401,'authentication_required');end(context,'authentication_required');return;}
+  if(permission.principal?.kind==='account'&&permission.principal.accountId!=='owner'&&[permission.principal.accountId,permission.principal.id].every(value=>typeof value==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(value))){context.diagnosticPrincipal={kind:'account',accountId:permission.principal.accountId,id:permission.principal.id};context.diagnosticId=randomUUID();diagnostic(context,'start',{code:'connecting'});}
   // The upgraded socket and factory never retain/request an HTTP-controlled configuration.
   try{wss.handleUpgrade(request,socket,head,ws=>connected(context,ws,permission.configuration,permission.signal));socket.resume();}catch{end(context,'device_protocol_invalid');}
  })().catch(()=>{socket.destroy();emit('network_error');});});

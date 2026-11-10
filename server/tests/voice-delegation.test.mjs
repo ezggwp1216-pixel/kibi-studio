@@ -18,6 +18,37 @@ const registration={version:1,identity:{deviceId:'02:11:22:33:44:55',clientId:'1
 const turn=()=>new Promise(resolve=>setImmediate(resolve));
 const outcome=ws=>new Promise(resolve=>{ws.once('open',()=>resolve('open'));ws.once('unexpected-response',(_,response)=>{response.resume();resolve(response.statusCode);});ws.once('error',()=>resolve('error'));});
 
+test('owner projections hide delegated account identity and session activity while the user sees their own',async t=>{
+ const f=await voiceFixture(t);
+ const approval=await f.voice.allowStudioAccount('alice');
+ assert.equal(approval.studioAccountId,null);assert.equal(approval.studioVoiceApproved,true);
+ const activated=await f.voice.activateStudioDevice({accountId:'alice',deviceId:'a-device'});
+ assert.equal(activated.scope.id,'a-device');
+ const ws=f.connect(aToken);assert.equal(await outcome(ws),'open');await turn();
+ f.permissions[0].onStatus({code:'ready',metrics:{inputPackets:7,outputPackets:5}});
+ assert.equal(f.voice.delegatedStatus('alice').activeSessions,1);
+ assert.equal(f.voice.delegatedStatus('alice').status,'active');
+ const owner=f.voice.status();
+ assert.equal(owner.activityVisibility,'service_only');assert.equal(owner.activeSessions,null);
+ assert.equal(owner.status,'listening');assert.equal(owner.code,'listening');
+ assert.equal(owner.scope,null);assert.equal(owner.delegation,null);assert.equal(owner.studioAccountId,null);
+ assert.doesNotMatch(JSON.stringify(owner),/alice|a-device|inputPackets|outputPackets/);
+});
+
+test('diagnostics bind trusted voice principal, survive closure and disappear after own-device deletion',async t=>{
+ const f=await voiceFixture(t);await f.voice.setDelegation({accountId:'alice',deviceId:'a-device'});
+ const ws=f.connect(aToken);assert.equal(await outcome(ws),'open');await turn();
+ f.permissions[0].onStatus({code:'ready',metrics:{inputPackets:7,outputPackets:5,transcript:'SYNTHETIC_PRIVATE_TEXT'}});
+ const own=f.voice.diagnosticsFor('alice','a-device');
+ assert.equal(own.observed,true);assert.equal(own.connection.code,'ready');assert.deepEqual(own.metrics,{inputPackets:7,outputPackets:5});
+ assert.equal(f.voice.diagnosticsFor('bob','b-device').observed,false);
+ assert.equal(f.voice.diagnosticsFor('owner','owner-device').observed,false);
+ assert.doesNotMatch(JSON.stringify(own),/SYNTHETIC|transcript|alice|a-device|session_id/);
+ const closed=once(ws,'close');await f.voice.setDelegation(null);await closed;
+ assert.equal(f.voice.diagnosticsFor('alice','a-device').connection.code,'cancelled');
+ f.a.state.devices=[];assert.equal(f.voice.diagnosticsFor('alice','a-device').observed,false);
+});
+
 async function voiceFixture(t,{configured=true}={}){
  const dir=await mkdtemp(join(tmpdir(),'kibi-delegated-voice-'));t.after(()=>rm(dir,{recursive:true,force:true}));
  const store=await openStore(join(dir,'owner')),a=await openStore(join(dir,'a')),b=await openStore(join(dir,'b'));
@@ -219,14 +250,15 @@ test('owner-only delegation resolves email/device ownership, protects mutations 
  assert.equal((await call('/api/settings/voice/studio-account',{method:'POST',session:owner,body:{email:a.user.email},headers:{'X-CSRF-Token':'wrong'}})).status,403);
  assert.equal((await call('/api/settings/voice/studio-account',{method:'POST',session:owner,body:{email:a.user.email},headers:{Origin:'https://other.example'}})).status,403);
  for(const invalid of [{email:'missing@example.test'},{email:a.user.email,accountId:a.user.id}])assert.equal((await call('/api/settings/voice/studio-account',{method:'POST',session:owner,body:invalid})).status,400);
- const approval=await call('/api/settings/voice/studio-account',{method:'POST',session:owner,body:{email:' ALICE@EXAMPLE.TEST '}});assert.equal(approval.status,200);assert.equal(approval.json.voice.studioAccountId,a.user.id);
+ const approval=await call('/api/settings/voice/studio-account',{method:'POST',session:owner,body:{email:' ALICE@EXAMPLE.TEST '}});assert.equal(approval.status,200);assert.equal(approval.json.voice.studioAccountId,null);assert.equal(approval.json.voice.studioVoiceApproved,true);
  const approvedProfile=(await call('/api/settings',{session:a})).json.voice;assert.equal(approvedProfile.studioVoice.approved,true);assert.equal(approvedProfile.delegated,undefined);
  assert.equal((await call('/api/settings',{session:b})).json.voice.studioVoice.approved,false);
  assert.equal((await call('/api/settings/voice/delegation',{method:'POST',session:a,body:grant})).status,403);
  assert.equal((await call('/api/settings/voice/delegation',{method:'POST',session:owner,body:grant,headers:{Origin:'https://other.example'}})).status,403);
  assert.equal((await call('/api/settings/voice/delegation',{method:'POST',session:owner,body:grant,headers:{'X-CSRF-Token':'wrong'}})).status,403);
  for(const invalid of [{email:'missing@example.test',deviceId:device.id},{email:'bob@example.test',deviceId:device.id},{email:'alice@example.test',deviceId:'unknown'},{email:'alice@example.test',deviceId:device.id,accountId:b.user.id}])assert.equal((await call('/api/settings/voice/delegation',{method:'POST',session:owner,body:invalid})).status,400);
- const granted=await call('/api/settings/voice/delegation',{method:'POST',session:owner,body:grant});assert.equal(granted.status,200);assert.deepEqual(granted.json.voice.delegation,{accountId:a.user.id,deviceId:device.id});
+ const granted=await call('/api/settings/voice/delegation',{method:'POST',session:owner,body:grant});assert.equal(granted.status,200);assert.equal(granted.json.voice.delegation,null);assert.equal(granted.json.voice.activityVisibility,'service_only');
+ for(const value of [approval.json,granted.json,(await call('/api/settings',{session:owner})).json,(await call('/api/overview',{session:owner})).json]){const serialized=JSON.stringify(value);assert.ok(!serialized.includes(a.user.id));assert.ok(!serialized.includes(device.id));}
  const own=(await call('/api/settings',{session:a})).json.voice;assert.equal(own.delegated,true);assert.equal(own.scope.id,device.id);assert.equal(own.registration,undefined);assert.equal(own.activeSessions,0);
  assert.equal((await call('/api/settings',{session:b})).json.voice.code,'tenant_voice_unavailable');assert.equal((await call('/api/settings/xiaozhi',{session:a})).status,409);
  assert.equal((await call('/api/settings/voice',{method:'POST',session:a,body:{provider:'openai'}})).status,409);

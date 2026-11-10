@@ -6,6 +6,7 @@ import {createOfficialRegistration} from './xiaozhi/official-registration.mjs';
 import {createOfficialXiaozhiAdapter} from './xiaozhi/official-adapter.mjs';
 import {createXiaozhiOpenAIAdapter} from './xiaozhi/adapter.mjs';
 import {unlinkedPath} from './private-files.mjs';
+import {createVoiceDiagnostics} from './voice-diagnostics.mjs';
 
 export const VOICE_MODEL='gpt-realtime';
 const hash=value=>createHash('sha256').update(value).digest('hex');
@@ -68,6 +69,7 @@ async function readTlsFile(input){
 export async function startVoiceModule({store,publicOrigin,config=voiceConfigFromEnv(),createAdapter,registrationFetch=fetch,authorizeDelegatedDevice,delegatedDeviceExists=()=>false,studioAccountExists=()=>false}={}){
  const enabled=config.enabled===true,endpoint=new URL('/kibi-xiaozhi/v1',publicOrigin);endpoint.protocol='wss:';
  const panel=createPanelVoiceAuthorizer({store}),localPanel=createPanelVoiceAuthorizer({store,requireCredentials:false});
+ const diagnostics=createVoiceDiagnostics();
  if(config.provider!==undefined&&!['openai','xiaozhi'].includes(config.provider))throw new Error('invalid_voice_provider');
  const registration=createOfficialRegistration({read:()=>store.xiaozhi(),write:value=>store.exclusive(async()=>{store.state.xiaozhi=store.seal(value);await persistSelection();}),fetchImpl:registrationFetch});
  const relayScopes=new Set();
@@ -157,7 +159,7 @@ export async function startVoiceModule({store,publicOrigin,config=voiceConfigFro
   });
  }
  let gateway=null,legacy=null,closed=false,tlsReady=false,errorCode=null;
- const status=()=>{
+ const privateStatus=()=>{
   const snapshot=gateway?.snapshot(),activeSessions=snapshot?.metrics.activeSessions||0,grant=delegation(),delegated=hasDelegation(),configured=delegated?provider()==='xiaozhi'&&grantAllowed(grant)&&!!registration.configuration():provider()==='xiaozhi'?!!registration.configuration()&&!!store.state.voice?.scope:!!store.ai()||!!legacy;
   let code=errorCode||snapshot?.code||(enabled?'configuration_required':'disabled');
   let state=!enabled?'disabled':errorCode?'error':!configured?'not_configured':activeSessions?(code==='ready'?'active':'connecting'):'listening';
@@ -165,15 +167,22 @@ export async function startVoiceModule({store,publicOrigin,config=voiceConfigFro
   if(delegated&&!configured&&!errorCode&&enabled&&!closed)code=!grant?'invalid_voice_delegation':provider()!=='xiaozhi'?'delegated_xiaozhi_required':!targetExists(grant)?'delegated_device_unavailable':'configuration_required';
   return {configured,enabled,status:state,code,provider:provider(),providerLocked:!!config.provider,scope:store.state.voice?.scope||null,delegation:grant,delegationSource:store.state.voice?.delegationSource==='studio'?'studio':null,studioAccountId:studioAccountId(),registration:registration.snapshot(),model:provider()==='xiaozhi'?null:VOICE_MODEL,endpoint:endpoint.href,tls:tlsReady,legacyConfigured:!!config.legacyDataDir,legacyReady:!!legacy,activeSessions};
  };
+ const status=()=>{
+  const profile=privateStatus(),studioVoiceApproved=!!studioAccountId();
+  if(!hasDelegation())return {...profile,studioAccountId:null,studioVoiceApproved};
+  const state=closed?'closed':!enabled?'disabled':errorCode?'error':!profile.configured?'not_configured':'listening';
+  return {...profile,status:state,code:closed?'closed':!enabled?'disabled':errorCode||(!profile.configured?'configuration_required':'listening'),scope:null,delegation:null,delegationSource:null,studioAccountId:null,studioVoiceApproved,activeSessions:null,activityVisibility:'service_only'};
+ };
  const delegatedStatus=accountId=>{
   const studioVoice=studioVoiceEligibility(accountId),grant=delegation();if(!grant||grant.accountId!==accountId)return {...unavailableVoice(),studioVoice};
-  const profile=status(),ownSession=profile.activeSessions>0&&[...relayScopes].some(scope=>scope.delegation?.accountId===accountId&&scope.delegation.deviceId===grant.deviceId&&!scope.controller.signal.aborted);
+  const profile=privateStatus(),ownSession=profile.activeSessions>0&&[...relayScopes].some(scope=>scope.delegation?.accountId===accountId&&scope.delegation.deviceId===grant.deviceId&&!scope.controller.signal.aborted);
   const state=ownSession||['disabled','error','closed','not_configured'].includes(profile.status)?profile.status:'listening';
   const code=state==='listening'?'listening':profile.code;
   return {configured:profile.configured,enabled:profile.enabled,status:state,code,provider:'xiaozhi',providerLocked:true,delegated:true,scope:{kind:'panel',id:grant.deviceId},studioVoice,model:null,endpoint:profile.endpoint,tls:profile.tls,legacyConfigured:false,legacyReady:false,activeSessions:ownSession?profile.activeSessions:0};
  };
- const close=async()=>{if(closed)return;closed=true;panel.close();localPanel.close();registration.close();for(const scope of relayScopes)scope.controller.abort();relayScopes.clear();legacy?.close();await gateway?.close();};
- const runtime={status,delegatedStatus,studioVoiceEligibility,allowStudioAccount,activateStudioDevice,address:()=>gateway?.address()||null,reconcile,registration,selectProvider,setDelegation,close};
+ const diagnosticsFor=(accountId,deviceId)=>{if(!delegatedDeviceExists({accountId,deviceId}))diagnostics.remove(accountId,deviceId);return diagnostics.read(accountId,deviceId);};
+ const close=async()=>{if(closed)return;closed=true;panel.close();localPanel.close();registration.close();for(const scope of relayScopes)scope.controller.abort();relayScopes.clear();legacy?.close();await gateway?.close();diagnostics.close();};
+ const runtime={status,delegatedStatus,diagnosticsFor,studioVoiceEligibility,allowStudioAccount,activateStudioDevice,address:()=>gateway?.address()||null,reconcile,registration,selectProvider,setDelegation,close};
  if(!enabled)return runtime;
  if(!config.keyFile||!config.certFile){errorCode='tls_required';return runtime;}
  let tls;
@@ -190,7 +199,7 @@ export async function startVoiceModule({store,publicOrigin,config=voiceConfigFro
  try{
   const {createXiaozhiGateway}=await import('./xiaozhi/gateway.mjs');
   gateway=createXiaozhiGateway({tls,host:config.host||'127.0.0.1',port:config.port??9444,
-   authorize,
+   authorize,onDiagnostics:observation=>diagnostics.observe(observation),
    createAdapter:createAdapter||((options)=>{
     if(options.configuration.provider!=='xiaozhi')return createXiaozhiOpenAIAdapter(options);
     // Only our routing marker is removed; the official validator must still
