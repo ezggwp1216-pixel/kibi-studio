@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
-const RELEASE = 'studio-platform-2026-11-10-user-diagnostics';
+const RELEASE = 'studio-platform-2026-11-10-thread-toolset';
 const DEFAULT_SOURCE = fileURLToPath(new URL('../', import.meta.url));
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -18,13 +18,43 @@ const failure = (code, path, extra = {}) => Object.assign(new Error(code), { cod
 // These hashes describe public KibiVirtual-dev program files only. No private
 // Studio baseline, user project, setting, credential or machine path is embedded.
 export const PUBLIC_STUDIO_BASELINES = Object.freeze(Object.fromEntries(Object.entries({
-  'src/server.mjs': ['226a1c0a95171bf6d53f546f2cb5ee58e0ee83fee585766b5a9dbee99f4f7975', '6add6c045ceafa8e4fc001c6f0da24731a7f4a05803c0bf7d4e13a0a96acdab2'],
-  'src/project-store.mjs': ['bc029db931d3aa867c09e15ca3d78ec53082297a212d9a49576fba37030747a7', 'd88617dfed845479f7703351bdee3ce49997426670c8e84d300fbaf3b1f1dd43'],
+  'src/server.mjs': ['226a1c0a95171bf6d53f546f2cb5ee58e0ee83fee585766b5a9dbee99f4f7975', 'c5b9c0281509288d5b4985678ffe38f93306dad5aa9fdeb9a0b2a828ca9d9bb6', '6add6c045ceafa8e4fc001c6f0da24731a7f4a05803c0bf7d4e13a0a96acdab2'],
+  'src/project-store.mjs': ['bc029db931d3aa867c09e15ca3d78ec53082297a212d9a49576fba37030747a7', '57e4b720952f84223ad71521137ea6ec1e9306d16a443562f3186cff73c50c9b', 'd88617dfed845479f7703351bdee3ce49997426670c8e84d300fbaf3b1f1dd43'],
   'src/codex-bridge.mjs': ['40ea4421c0ce3a5b6a894a82a95e66bfc5af404dfc0378c354072cc6c503b307', '02be70941a1bf4db6082ed74323e32aa2fc169b43a3adb02ff4cca07041a7ef1'],
   'web/app.js': ['8d661295104ab31d3e6bec7be9faba407b929fb220f93b8dfee4579a69e7239c', '3218b02722c259cbfcc4e866ff0fee26568c1714375974e46c85cd518a9abd79'],
   'web/index.html': ['69e7de1cc996c9ffa883659d2cf025bc0cef7b12c2d48d7d4eea5151391d3344', '175c210ff0909e3ed022b7af185688819d7054d7c7239e485e967b31743b57ce'],
   'native/support.mjs': ['3c81fd1771b52200ad8e640677624360e94f7e348691b9df6a97e2da306fe4af', '3c81fd1771b52200ad8e640677624360e94f7e348691b9df6a97e2da306fe4af'],
-}).map(([path, [beforeSha256, afterSha256]]) => [path, Object.freeze({ beforeSha256, afterSha256 })])));
+}).map(([path, [beforeSha256, afterSha256, previousAfterSha256]]) => [path, Object.freeze({ beforeSha256, afterSha256, ...(previousAfterSha256 ? { previousAfterSha256 } : {}) })])));
+
+// app-server resumes retain their original dynamic tools. A toolset change
+// therefore needs one fresh internal thread, without deleting UI/project data.
+const THREAD_TOOLSET_PATCHES = Object.freeze({
+  'src/server.mjs': [
+    ['];\nconst MIME=', '];\nconst toolsetRevision=sha256(JSON.stringify(dynamicTools));\nconst MIME='],
+    ['buildStore.getThreadId()||undefined', 'buildStore.getThreadId(toolsetRevision)||undefined'],
+    ['buildStore.setThreadId(info.threadId)', 'buildStore.setThreadId(info.threadId,toolsetRevision)'],
+    ['store.getThreadId()||undefined', 'store.getThreadId(toolsetRevision)||undefined'],
+    ['store.setThreadId(info.threadId)', 'store.setThreadId(info.threadId,toolsetRevision)'],
+  ],
+  'src/project-store.mjs': [
+    ['  getThreadId:()=>state.threadId,', '  getThreadId:toolsetRevision=>toolsetRevision===undefined||state.threadToolsetRevision===toolsetRevision?state.threadId:null,'],
+    ['  setThreadId:threadId=>transaction(()=>{state.threadId=threadId;chat.threadId=threadId;}),', '  setThreadId:(threadId,toolsetRevision)=>transaction(()=>{state.threadId=threadId;if(toolsetRevision===undefined)delete state.threadToolsetRevision;else state.threadToolsetRevision=toolsetRevision;chat.threadId=threadId;}),'],
+  ],
+});
+
+/** Pure program-source transformation. Installation must use the pinned guard
+ * in upgradePublicProgram; arbitrary local programs are never authorized here. */
+export function patchThreadToolsetProgram(path, bytes) {
+  if (!Object.hasOwn(THREAD_TOOLSET_PATCHES, path)) throw failure('upgrade_unknown_baseline', path);
+  let source;
+  try { source = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+  catch { throw failure('upgrade_invalid_program', path); }
+  for (const [before, after] of THREAD_TOOLSET_PATCHES[path]) {
+    if (source.split(before).length !== 2) throw failure('upgrade_anchor_mismatch', path);
+    source = source.replace(before, after);
+  }
+  return Buffer.from(source);
+}
 
 const STORE_METHOD = `  installPublicAssets:(input,guard=()=>{})=>transaction(async()=>{
    guard();if(input?.expectedProjectId!==projectId)throw problem('Активный проект изменился.',409);
@@ -70,7 +100,19 @@ function transform(path, bytes) {
     if (source.split(before).length !== 2) throw failure('upgrade_anchor_mismatch', path);
     source = source.replace(before, after);
   }
-  return Buffer.from(source);
+  return Object.hasOwn(THREAD_TOOLSET_PATCHES, path) ? patchThreadToolsetProgram(path, Buffer.from(source)) : Buffer.from(source);
+}
+
+/** Accept exactly the original public baseline, the previously shipped public
+ * platform baseline, or the complete current baseline. No application runs. */
+export function upgradePublicProgram(path, bytes) {
+  const expected = PUBLIC_STUDIO_BASELINES[path], actual = digest(bytes);
+  if (!expected || ![expected.beforeSha256, expected.previousAfterSha256, expected.afterSha256].filter(Boolean).includes(actual)) throw failure('upgrade_unknown_baseline', path);
+  const next = actual === expected.afterSha256 ? bytes
+    : actual === expected.previousAfterSha256 ? patchThreadToolsetProgram(path, bytes)
+      : transform(path, bytes);
+  if (digest(next) !== expected.afterSha256) throw failure('upgrade_transform_mismatch', path);
+  return next;
 }
 
 const PAYLOADS = Object.freeze([
@@ -160,9 +202,7 @@ export async function upgradeStudio({ root, sourceRoot = DEFAULT_SOURCE, apply =
   // Validate every public baseline and all transforms before creating anything.
   for (const [path, expected] of Object.entries(PUBLIC_STUDIO_BASELINES)) {
     const before = await readProgram(target, path);
-    if (![expected.beforeSha256, expected.afterSha256].includes(before.sha256)) throw failure('upgrade_unknown_baseline', path);
-    const next = before.sha256 === expected.afterSha256 ? before.bytes : transform(path, before.bytes);
-    if (digest(next) !== expected.afterSha256) throw failure('upgrade_transform_mismatch', path);
+    const next = upgradePublicProgram(path, before.bytes);
     checkSyntax(path, next);
     const entry = { path, before, bytes: next, afterSha256: expected.afterSha256, mode: before.mode };
     (before.sha256 === expected.afterSha256 ? prerequisites : entries).push(entry);
