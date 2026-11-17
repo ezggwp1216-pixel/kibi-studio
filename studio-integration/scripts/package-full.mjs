@@ -15,6 +15,7 @@ const BASE_MANIFEST_SHA='374736db38271ade664cbc6ff53a4e878d466f41167433cc7e1dcc8
 const BASE_RELEASE_SHA='fd0594a34d8bc98b25a4a3a68190b6de1d0220fe3bdf8de17ec94a4b2cb9bcf2';
 const BASELINE_SHA='3522c57a2434a37f8eef35d556aa6b4d55e3bd309e0484be6e4a83b81b8c1c96';
 const HELPER_SHA='45cf98639d1c06b6ea3c03604cb167dede4651e751fa90afe9cf419ea2453b87';
+const FIXED_NODE_BOOTSTRAP_SHA='adfc7eb70bdea022b70b95c8e733e29e51e6dc423e4c0fe3069bf8eb834615f7';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const json=value=>Buffer.from(JSON.stringify(value,null,2)+'\n');
 const fail=(code,file)=>Object.assign(new Error(code),{code,...(file?{file}:{})});
@@ -94,7 +95,8 @@ const readme=`# Киби Studio: непубликованный кандидат
 а не Git-коммит нового кандидата. Новый GitHub SHA не создавался.
 
 ZIP и manifest собраны из проверенного публичного release-candidate-4. Изменены
-семь программных файлов Studio integration и семь canonical guide targets; добавлен публичный
+семь программных файлов Studio integration, семь canonical guide targets и строго
+закреплённое исправление scripts/bootstrap.mjs; добавлен публичный
 resources/server-modules-release.json. Нейтральный projects/kibi-base и все
 templates сохранены побайтно. Установленная Studio и QA-каталоги не были input. Документация приведена к v2; аппаратные контракты и все 135 neutral template/project файлов сохранены побайтно.
 
@@ -103,8 +105,10 @@ templates сохранены побайтно. Установленная Studio
 на извлечённом публичном результате без runtime/auth. Для ручного просмотра
 извлекайте ZIP в новую development-папку. Не заменяйте личную установленную Studio.
 
-Наружные bootstrap.sh/.mjs/.py и runtime-lock.json скопированы без изменений
-из проверенной базы. Их проверки пересчитаны в release.json. Существующий
+Наружные bootstrap.sh/.py и runtime-lock.json скопированы без изменений
+из проверенной базы. Node bootstrap.mjs с исправленной проверкой точки входа
+через macOS directory aliases закреплён SHA-256 adfc7eb70bdea022b70b95c8e733e29e51e6dc423e4c0fe3069bf8eb834615f7
+и совпадает с scripts/bootstrap.mjs внутри ZIP. Их проверки пересчитаны в release.json. Существующий
 bootstrap installer загружает опубликованный commit с GitHub: запуск с lineage
 SHA установит прежнюю опубликованную поставку, а не этот локальный кандидат.
 В этой проверке использована только чистая verifyKit; install/runtime/login
@@ -119,12 +123,15 @@ host вычисляет UTF-8 SHA-256. UI и действующие account scop
 `;
 
 /** Read only the pinned public release archive and named public overlay files. */
-export async function packageFullStudio({baseDir,outputDir,helperFile=fileURLToPath(new URL('../../server/studio/full-release.mjs',import.meta.url))}={}){
-  if(typeof baseDir!=='string'||typeof outputDir!=='string'||!path.isAbsolute(baseDir)||!path.isAbsolute(outputDir)||!path.isAbsolute(helperFile))throw fail('full_package_usage');
+export async function packageFullStudio({baseDir,outputDir,helperFile=fileURLToPath(new URL('../../server/studio/full-release.mjs',import.meta.url)),bootstrapNodeFile=fileURLToPath(new URL('../../bootstrap.mjs',import.meta.url))}={}){
+  if(typeof baseDir!=='string'||typeof outputDir!=='string'||!path.isAbsolute(baseDir)||!path.isAbsolute(outputDir)||!path.isAbsolute(helperFile)||typeof bootstrapNodeFile!=='string'||!path.isAbsolute(bootstrapNodeFile))throw fail('full_package_usage');
   if(Number(process.versions.node.split('.')[0])<24)throw fail('full_package_node_24_required');
   baseDir=await realpath(baseDir);
   helperFile=await realpath(helperFile);
   if(digest(await ordinary(helperFile))!==HELPER_SHA)throw fail('full_package_helper_mismatch');
+  bootstrapNodeFile=await realpath(bootstrapNodeFile);
+  const fixedBootstrapBytes=await ordinary(bootstrapNodeFile,128*1024);
+  if(digest(fixedBootstrapBytes)!==FIXED_NODE_BOOTSTRAP_SHA)throw fail('full_package_bootstrap_mismatch','bootstrap.mjs');
   const {decodeReleaseZip,encodeFullPackage,assertDistributionPath}=await import(pathToFileURL(helperFile).href);
   const releaseBytes=await ordinary(path.join(baseDir,'release.json'));
   const manifestBytes=await ordinary(path.join(baseDir,'kibi-studio-local.manifest.json'),4*1024*1024);
@@ -159,6 +166,9 @@ export async function packageFullStudio({baseDir,outputDir,helperFile=fileURLToP
     if(digest(bytes)!==baseRelease[key]||!baseFiles.get('scripts/'+name)?.equals(bytes))throw fail('full_package_bootstrap_mismatch',name);
     bootstraps.set(name,bytes);
   }
+  // Preserve the pinned historical base, then replace only the approved CLI fix.
+  bootstraps.set('bootstrap.mjs',fixedBootstrapBytes);
+  files.set('scripts/bootstrap.mjs',fixedBootstrapBytes);changed.push('scripts/bootstrap.mjs');
   const output=encodeFullPackage(files,{version:'0.3.1',releaseName:RELEASE,publicSdkExceptions:baseManifest.publicSdkExceptions||[]});
   Object.assign(output.release,{sourceCommit:BASE_COMMIT,baseCommit:BASE_COMMIT,baseRelease:baseRelease.release,baseArchiveSha256:BASE_ZIP_SHA,published:false,candidate:true});
   for(const[name,key]of bootstrapNames)output.release[key]=digest(bootstraps.get(name));
@@ -191,7 +201,7 @@ export async function packageFullStudio({baseDir,outputDir,helperFile=fileURLToP
     const updaterCheck=JSON.parse(checked.stdout);
     if(!updaterCheck.ok||updaterCheck.mode!=='check'||updaterCheck.changes?.length!==0)throw fail('full_package_updater_verification_failed');
     const publications=new Map([['kibi-studio-local.zip',output.archive],['kibi-studio-local.zip.sha256',Buffer.from(output.release.sha256+'  kibi-studio-local.zip\n')],['kibi-studio-local.manifest.json',json(output.manifest)],['release.json',json(output.release)],...bootstraps,['README.md',Buffer.from(readme)]]);
-    const report={ok:true,release:RELEASE,version:'0.3.1',sourceCommit:BASE_COMMIT,baseCommit:BASE_COMMIT,published:false,archiveSha256:output.release.sha256,archiveBytes:output.archive.length,manifestSha256:output.release.manifestSha256,releaseSha256:digest(json(output.release)),files:decoded.size,baseFiles:baseFiles.size,baselinesCompared:26,changed,added,neutralFilesVerified,bootstrapVerified:true,roundtripVerified:true,updaterCheck,privateDataIncluded:false,runtimeInstalled:false,authenticationStarted:false};
+    const report={ok:true,release:RELEASE,version:'0.3.1',sourceCommit:BASE_COMMIT,baseCommit:BASE_COMMIT,published:false,archiveSha256:output.release.sha256,archiveBytes:output.archive.length,manifestSha256:output.release.manifestSha256,releaseSha256:digest(json(output.release)),files:decoded.size,baseFiles:baseFiles.size,baselinesCompared:26,changed,added,neutralFilesVerified,bootstrapVerified:true,nodeBootstrapSha256:FIXED_NODE_BOOTSTRAP_SHA,roundtripVerified:true,updaterCheck,privateDataIncluded:false,runtimeInstalled:false,authenticationStarted:false};
     const publicationManifest={schemaVersion:1,release:RELEASE,version:'0.3.1',repository:'ezggwp1216-pixel/kibi-studio',published:false,requiresNewGitCommit:true,lineageCommit:BASE_COMMIT,files:Object.fromEntries([...publications].filter(([name])=>name!=='README.md').map(([name,bytes])=>[name,{sha256:digest(bytes),bytes:bytes.length}]))};
     publications.set('publication.json',json(publicationManifest));
     publications.set('PUBLISH.md',Buffer.from(publicationReadme));
@@ -199,6 +209,7 @@ export async function packageFullStudio({baseDir,outputDir,helperFile=fileURLToP
     for(const[name,bytes]of publications)await writeFile(path.join(publication,name),bytes,{flag:'wx',mode:0o644});
     // Detect a mixed source cohort before making the new candidate visible.
     if(!(await ordinary(path.join(overlay,'release.json'))).equals(overlayReleaseBytes))throw fail('full_package_changing_input');
+    if(!(await ordinary(bootstrapNodeFile,128*1024)).equals(fixedBootstrapBytes))throw fail('full_package_changing_input');
     for(const[name,bytes]of payload)if(!(await ordinary(path.join(overlay,name))).equals(bytes))throw fail('full_package_changing_input');
     await rename(publication,outputDir);
     return{...report,outputDir};
@@ -208,7 +219,7 @@ export async function packageFullStudio({baseDir,outputDir,helperFile=fileURLToP
 async function main(){
   const args=process.argv.slice(2),options={};
   for(let index=0;index<args.length;index++){
-    const key={'--base-dir':'baseDir','--out':'outputDir','--helper-file':'helperFile'}[args[index]];
+    const key={'--base-dir':'baseDir','--out':'outputDir','--helper-file':'helperFile','--bootstrap-node-file':'bootstrapNodeFile'}[args[index]];
     if(!key||!args[index+1]||options[key])throw fail('full_package_usage');options[key]=args[++index];
   }
   console.log(JSON.stringify(await packageFullStudio(options)));

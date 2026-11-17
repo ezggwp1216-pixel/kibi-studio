@@ -142,7 +142,7 @@ export async function install({commit,destination,runtimeRoot,nodeRoot,lock,fetc
  }
  return {projectPath:destination,verifiedFiles:files.length,runtime,browser};
 }
-if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+if(process.argv[1]&&await realpath(process.argv[1]).catch(()=>null)===fileURLToPath(import.meta.url)){
  const args=process.argv.slice(2),options={};for(let i=0;i<args.length;i++){const key=args[i];if(key==='--install-only'){options.installOnly=true;continue;}const keys={'--commit':'commit','--destination':'destination','--runtime-root':'runtimeRoot','--node-root':'nodeRoot','--lock':'lockPath'};if(!keys[key]||!args[i+1])throw Error('Invalid bootstrap argument');options[keys[key]]=args[++i];}
  try{options.lock=JSON.parse(await readFile(options.lockPath,'utf8'));await install(options);}catch(error){console.error('Kibi Studio installation failed: '+error.message);process.exitCode=1;}
 }

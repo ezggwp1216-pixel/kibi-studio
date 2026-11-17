@@ -3,11 +3,11 @@
   "root": "kibi-studio",
   "archive": {
     "name": "kibi-studio-local.zip",
-    "size": 21367993,
-    "sha256": "cea536f3695c928421f3d88514d3308c4e2939696b0c6b06a532fbfad48055bf"
+    "size": 21367995,
+    "sha256": "7361465c022fa255f1d372a7a3d6dc04a33742348fc97973924bb8ef05f4b953"
   },
   "fileCount": 2657,
-  "totalBytes": 75858486,
+  "totalBytes": 75858504,
   "publicSdkExceptions": [
     "resources/native-sdk/bin/bootloader_dio_40m.elf"
   ],
@@ -12624,8 +12624,8 @@
     },
     {
       "path": "kibi-studio/scripts/bootstrap.mjs",
-      "size": 17028,
-      "sha256": "6cbd9d6096d2e56989e32058933687b9d7f16fbb1669f137c38190cd9ed2294a"
+      "size": 17046,
+      "sha256": "adfc7eb70bdea022b70b95c8e733e29e51e6dc423e4c0fe3069bf8eb834615f7"
     },
     {
       "path": "kibi-studio/scripts/bootstrap.py",

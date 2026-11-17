@@ -11,17 +11,21 @@ import {decodeReleaseZip} from '../../server/studio/full-release.mjs';
 const overlay=fileURLToPath(new URL('../',import.meta.url));
 const base=process.env.KIBI_STUDIO_PUBLIC_RELEASE;
 const lineage='5c82a27e8ca72658ace8d0cd3e7aff2494072ad3';
+const fixedBootstrap=fileURLToPath(new URL('../../bootstrap.mjs',import.meta.url));
+const fixedBootstrapSha='adfc7eb70bdea022b70b95c8e733e29e51e6dc423e4c0fe3069bf8eb834615f7';
 const payload=['src/studio-account.mjs','src/studio-platform.mjs','src/studio-plugins.mjs','web/app.js','web/index.html','web/server-modules.js','web/server-modules.css','docs/API.md','docs/SDK.md','docs/LOCAL_STUDIO.md','docs/SERVER_MODULES.md','docs/SERVER_MODULES_DEPLOY.md','docs/YOUTUBE_MODULE.md','src/platform-guides/API.md'];
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const run=(...args)=>spawnSync(process.execPath,[join(overlay,'scripts/package-full.mjs'),...args],{encoding:'utf8',timeout:120000,maxBuffer:1024*1024});
 async function scratch(t){const dir=await mkdtemp(join(tmpdir(),'kibi-modules-full-'));t.after(()=>rm(dir,{recursive:true,force:true}));return dir;}
 async function decoded(root){return decodeReleaseZip({archive:await readFile(join(root,'kibi-studio-local.zip')),manifest:JSON.parse(await readFile(join(root,'kibi-studio-local.manifest.json'),'utf8')),release:JSON.parse(await readFile(join(root,'release.json'),'utf8'))});}
 
-test('full candidate includes only named program and canonical guide changes plus metadata and preserves the public neutral starter', {skip:!base},async t=>{
+test('full candidate includes only named program, guide and pinned bootstrap changes plus metadata and preserves the public neutral starter', {skip:!base},async t=>{
   const dir=await scratch(t),out=join(dir,'candidate');
   const result=run('--base-dir',base,'--out',out);assert.equal(result.status,0,result.stderr);
   const report=JSON.parse(result.stdout),release=JSON.parse(await readFile(join(out,'release.json'),'utf8'));
   assert.equal(release.release,'studio-full-server-modules-20261117-rc1');assert.equal(release.version,'0.3.1');
+  assert.equal(release.bootstrapNodeSha256,fixedBootstrapSha);
+  assert.deepEqual(await readFile(join(out,'bootstrap.mjs')),await readFile(fixedBootstrap));
   assert.equal(release.sourceCommit,lineage);assert.equal(release.baseCommit,lineage);assert.equal(release.published,false);
   assert.equal(report.baselinesCompared,26);assert.equal(report.bootstrapVerified,true);assert.equal(report.roundtripVerified,true);
   assert.deepEqual(report.updaterCheck.changes,[]);assert.equal(report.updaterCheck.mode,'check');
@@ -32,7 +36,7 @@ test('full candidate includes only named program and canonical guide changes plu
   const instructions=await readFile(join(out,'PUBLISH.md'),'utf8');assert.match(instructions,/--commit/);assert.match(instructions,/--install-only/);assert.match(instructions,/projects/);
   const before=await decoded(base),after=await decoded(out),changed=[];
   for(const[name,bytes]of before){assert.ok(after.has(name),name);if(!after.get(name).equals(bytes))changed.push(name);}
-  assert.deepEqual(changed.sort(),payload.filter(name=>before.has(name)).sort());
+  assert.deepEqual(changed.sort(),[...payload.filter(name=>before.has(name)),'scripts/bootstrap.mjs'].sort());
   for(const name of payload)assert.deepEqual(after.get(name),await readFile(join(overlay,name)));
   for(const name of payload.filter(name=>name.startsWith('docs/')||name.startsWith('src/platform-guides/')))assert.deepEqual(after.get(name),await readFile(join(overlay,'../server/docs',name.split('/').at(-1))),name);
   assert.deepEqual([...after.keys()].filter(name=>!before.has(name)).sort(),[...payload.filter(name=>!before.has(name)),'resources/server-modules-release.json'].sort());
@@ -42,7 +46,9 @@ test('full candidate includes only named program and canonical guide changes plu
   const metadata=JSON.parse(after.get('resources/server-modules-release.json'));
   assert.equal(metadata.published,false);assert.equal(metadata.sourceCommit,lineage);
   for(const[name,key]of [['bootstrap.sh','bootstrapShellSha256'],['bootstrap.mjs','bootstrapNodeSha256'],['bootstrap.py','bootstrapSha256'],['runtime-lock.json','runtimeLockSha256']]){
-    const bytes=await readFile(join(out,name));assert.deepEqual(bytes,await readFile(join(base,name)));assert.equal(sha(bytes),release[key]);
+    const bytes=await readFile(join(out,name));
+    assert.deepEqual(bytes,await readFile(name==='bootstrap.mjs'?fixedBootstrap:join(base,name)));
+    assert.deepEqual(after.get('scripts/'+name),bytes);assert.equal(sha(bytes),release[key]);
   }
   const again=run('--base-dir',base,'--out',join(dir,'candidate-two'));assert.equal(again.status,0,again.stderr);
   assert.equal(JSON.parse(again.stdout).archiveSha256,report.archiveSha256);
@@ -57,10 +63,14 @@ test('a changed public base manifest is rejected before an output candidate is c
   await assert.rejects(()=>readFile(join(out,'release.json')),{code:'ENOENT'});
 });
 
-test('an unpinned helper is rejected without importing its code',{skip:!base},async t=>{
+test('an unpinned helper or bootstrap is rejected without importing its code',{skip:!base},async t=>{
   const dir=await scratch(t),helper=join(dir,'helper.mjs'),sentinel=join(dir,'must-not-exist');
   await writeFile(helper,'import {writeFileSync} from "node:fs";writeFileSync('+JSON.stringify(sentinel)+',"executed");');
   const result=run('--base-dir',base,'--out',join(dir,'candidate'),'--helper-file',helper);
   assert.equal(result.status,1);assert.equal(JSON.parse(result.stderr).code,'full_package_helper_mismatch');
   await assert.rejects(()=>readFile(sentinel),{code:'ENOENT'});
+  const bootstrapResult=run('--base-dir',base,'--out',join(dir,'bootstrap-candidate'),'--bootstrap-node-file',helper);
+  assert.equal(bootstrapResult.status,1);assert.equal(JSON.parse(bootstrapResult.stderr).code,'full_package_bootstrap_mismatch');
+  await assert.rejects(()=>readFile(sentinel),{code:'ENOENT'});
+  await assert.rejects(()=>readFile(join(dir,'bootstrap-candidate/release.json')),{code:'ENOENT'});
 });
