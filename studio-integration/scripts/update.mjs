@@ -4,12 +4,13 @@ import {createHash,randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-export const PROGRAM_FILES=Object.freeze(['src/studio-account.mjs','src/studio-platform.mjs','src/studio-plugins.mjs','web/app.js','web/index.html','web/server-modules.js','web/server-modules.css']);
-export const GUIDE_FILES=Object.freeze(['docs/API.md','docs/SDK.md','docs/LOCAL_STUDIO.md','docs/SERVER_MODULES.md','docs/SERVER_MODULES_DEPLOY.md','docs/YOUTUBE_MODULE.md','src/platform-guides/API.md']);
+const PREVIOUS_PROGRAM_FILES=Object.freeze(['src/studio-account.mjs','src/studio-platform.mjs','src/studio-plugins.mjs','web/app.js','web/index.html','web/server-modules.js','web/server-modules.css']);
+export const PROGRAM_FILES=Object.freeze([...PREVIOUS_PROGRAM_FILES,'src/server.mjs','src/attachment-assets.mjs']);
+export const GUIDE_FILES=Object.freeze(['docs/API.md','docs/SDK.md','docs/LOCAL_STUDIO.md','docs/SERVER_MODULES.md','docs/SERVER_MODULES_DEPLOY.md','docs/YOUTUBE_MODULE.md','src/platform-guides/API.md','docs/CHAT_PHOTOS.md']);
 export const PAYLOAD_FILES=Object.freeze([...PROGRAM_FILES,...GUIDE_FILES]);
 const BASELINE_SHA256='3522c57a2434a37f8eef35d556aa6b4d55e3bd309e0484be6e4a83b81b8c1c96';
-const PREVIOUS_RELEASES_SHA256='9ac3aefbccd9a18ee016bee9270d8405df87645c44389c527f1309c45a9b49e9';
-const releaseId='studio-server-modules-2026-11-17-r1';
+const PREVIOUS_RELEASES_SHA256='30f5cd212eb7ba74f64486cf3bb89b33b637682657608fb353fac1fda5f5e234';
+const releaseId='studio-server-modules-2026-11-18-r2';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const fail=(code,file)=>Object.assign(new Error(code),{code,...(file?{file}:{})});
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
@@ -43,7 +44,7 @@ async function bundleFiles(bundle){
   const previousFile=await publicFile(bundle,'manifests/previous-releases.json');
   if(previousFile.sha256!==PREVIOUS_RELEASES_SHA256)throw fail('studio_previous_release_manifest_mismatch');
   const previous=JSON.parse(previousFile.bytes.toString('utf8'));
-  if(previous.schemaVersion!==1||!Array.isArray(previous.releases)||previous.releases.length>8||previous.releases.some(row=>!object(row.files)||!PROGRAM_FILES.every(name=>Object.hasOwn(row.files,name))||!Object.entries(row.files).every(([name,hash])=>PAYLOAD_FILES.includes(name)&&/^[a-f0-9]{64}$/.test(hash))))throw fail('studio_previous_release_manifest_mismatch');
+  if(previous.schemaVersion!==1||!Array.isArray(previous.releases)||previous.releases.length>8||previous.releases.some(row=>!object(row.files)||!PREVIOUS_PROGRAM_FILES.every(name=>Object.hasOwn(row.files,name))||!Object.entries(row.files).every(([name,hash])=>PAYLOAD_FILES.includes(name)&&/^[a-f0-9]{64}$/.test(hash))))throw fail('studio_previous_release_manifest_mismatch');
   const release=JSON.parse((await publicFile(bundle,'release.json')).bytes.toString('utf8'));
   if(release.schemaVersion!==1||release.release!==releaseId||!object(release.files)||Object.keys(release.files).length!==PAYLOAD_FILES.length||!PAYLOAD_FILES.every(name=>/^[a-f0-9]{64}$/.test(release.files[name]||'')))throw fail('studio_payload_mismatch');
   const payload=new Map();

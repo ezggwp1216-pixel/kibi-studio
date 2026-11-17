@@ -3,11 +3,11 @@
   "root": "kibi-studio",
   "archive": {
     "name": "kibi-studio-local.zip",
-    "size": 21367995,
-    "sha256": "7361465c022fa255f1d372a7a3d6dc04a33742348fc97973924bb8ef05f4b953"
+    "size": 21376695,
+    "sha256": "f05e82320861454161dab6441836d7767490529fef6ae8799530c8200941723c"
   },
-  "fileCount": 2657,
-  "totalBytes": 75858504,
+  "fileCount": 2659,
+  "totalBytes": 75881555,
   "publicSdkExceptions": [
     "resources/native-sdk/bin/bootloader_dio_40m.elf"
   ],
@@ -46,6 +46,11 @@
       "path": "kibi-studio/docs/API.md",
       "size": 35582,
       "sha256": "a9275942ea478aaa13d62b7653694cabfe9493804c765f272b83a9fb35c64f44"
+    },
+    {
+      "path": "kibi-studio/docs/CHAT_PHOTOS.md",
+      "size": 6242,
+      "sha256": "4f6ea026d90f9d08191cda0311e98df27d4bd08fc40467a224e49a0d1b5b6159"
     },
     {
       "path": "kibi-studio/docs/HARDWARE.md",
@@ -12619,8 +12624,8 @@
     },
     {
       "path": "kibi-studio/resources/server-modules-release.json",
-      "size": 1924,
-      "sha256": "e09ab159f2c02263a2e65c8fec6320c2da37fda2b58e5b380831112fd74d8aaf"
+      "size": 2196,
+      "sha256": "818477e852f1daaa0560c7579cbb6690e6b9fe6b87fc950ebdc8fe6f68b46988"
     },
     {
       "path": "kibi-studio/scripts/bootstrap.mjs",
@@ -12661,6 +12666,11 @@
       "path": "kibi-studio/scripts/start.mjs",
       "size": 1858,
       "sha256": "a16b70b51333f9edd3890004e4ea911f9bf0f2b1382f47b1fffeef86fa61b515"
+    },
+    {
+      "path": "kibi-studio/src/attachment-assets.mjs",
+      "size": 10362,
+      "sha256": "6992ecaa2e69b7f15bdab9a666930d9dc98d3f9fa0f2e77f6dbca85c39b9e1e9"
     },
     {
       "path": "kibi-studio/src/attachments.mjs",
@@ -12799,8 +12809,8 @@
     },
     {
       "path": "kibi-studio/src/server.mjs",
-      "size": 43325,
-      "sha256": "12f94f7f4ab8c34496b64a1b544f93bbe1ddfe8688a4517985d9607fbebbe194"
+      "size": 45888,
+      "sha256": "bf520a831b7e5d9975eb9bbb28318002d6dcec93854c941dca637b6c0539a68a"
     },
     {
       "path": "kibi-studio/src/source-zip.mjs",
@@ -12814,8 +12824,8 @@
     },
     {
       "path": "kibi-studio/src/studio-platform.mjs",
-      "size": 32118,
-      "sha256": "f2c8ab079afc03365c32c2469aa2d5f93439220ddb464ffc7b54c1c7396058a4"
+      "size": 35730,
+      "sha256": "5b6f0f9c28c93f1d110fed2e25a8c6cdfdeb75d914178a9060fc844a3056917e"
     },
     {
       "path": "kibi-studio/src/studio-plugins.mjs",

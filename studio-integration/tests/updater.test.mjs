@@ -36,11 +36,13 @@ test('checking a pinned public Studio validates the plan without changing any fi
 
 test('applying installs usable tools and routes, preserves guard files, and is idempotent',integration,async t=>{
   const root=await target(t);
-  const before=await readFile(join(root,'src/server.mjs'));
+  const before=await readFile(join(root,'src/project-store.mjs'));
   await mkdir(join(root,'.studio'),{mode:0o700});await writeFile(join(root,'.studio/do-not-open'),'synthetic untouched');
   await mkdir(join(root,'projects'));await writeFile(join(root,'projects/do-not-open'),'synthetic untouched');
   const result=run('--studio',root,'--apply');assert.equal(result.status,0,result.stderr);
-  assert.deepEqual(await readFile(join(root,'src/server.mjs')),before);
+  assert.deepEqual(await readFile(join(root,'src/project-store.mjs')),before);
+  assert.deepEqual(await readFile(join(root,'src/server.mjs')),await readFile(join(overlay,'src/server.mjs')));
+  assert.deepEqual(await readFile(join(root,'src/attachment-assets.mjs')),await readFile(join(overlay,'src/attachment-assets.mjs')));
   assert.equal(await readFile(join(root,'.studio/do-not-open'),'utf8'),'synthetic untouched');
   assert.equal(await readFile(join(root,'projects/do-not-open'),'utf8'),'synthetic untouched');
   const {platformTools,createStudioPlatform}=await import(pathToFileURL(join(root,'src/studio-platform.mjs')));
@@ -70,11 +72,11 @@ for(const name of ['src/server.mjs','src/project-store.mjs','src/build-service.m
   });
 }
 
-test('an unknown existing new payload path is not overwritten',integration,async t=>{
-  const root=await target(t);await writeFile(join(root,'src/studio-plugins.mjs'),'// user extension');
+for(const name of ['src/studio-plugins.mjs','src/attachment-assets.mjs','docs/CHAT_PHOTOS.md'])test('an unknown existing '+name+' is not overwritten',integration,async t=>{
+  const root=await target(t);await mkdir(dirname(join(root,name)),{recursive:true});await writeFile(join(root,name),'// user extension');
   const result=run('--studio',root,'--apply');assert.equal(result.status,1);
   assert.equal(JSON.parse(result.stderr).code,'studio_baseline_mismatch');
-  assert.equal(await readFile(join(root,'src/studio-plugins.mjs'),'utf8'),'// user extension');
+  assert.equal(await readFile(join(root,name),'utf8'),'// user extension');
 });
 
 for(const kind of ['symlink','hardlink'])test(kind+' at a public target path fails closed',integration,async t=>{
@@ -88,7 +90,7 @@ for(const kind of ['symlink','hardlink'])test(kind+' at a public target path fai
 test('payload corruption is detected before writing even when target baseline is valid',integration,async t=>{
   const root=await target(t),bundle=await mkdtemp(join(tmpdir(),'kibi-module-bundle-'));
   t.after(()=>rm(bundle,{recursive:true,force:true}));
-  const names=['scripts/update.mjs','manifests/baselines.json','manifests/previous-releases.json','release.json','src/studio-account.mjs','src/studio-platform.mjs','src/studio-plugins.mjs','web/app.js','web/index.html','web/server-modules.js','web/server-modules.css',...guideTargets];
+  const names=['scripts/update.mjs','manifests/baselines.json','manifests/previous-releases.json','release.json','src/studio-account.mjs','src/studio-platform.mjs','src/studio-plugins.mjs','src/server.mjs','src/attachment-assets.mjs','web/app.js','web/index.html','web/server-modules.js','web/server-modules.css',...guideTargets,'docs/CHAT_PHOTOS.md'];
   for(const name of names){await mkdir(dirname(join(bundle,name)),{recursive:true});await copyFile(join(overlay,name),join(bundle,name));}
   await writeFile(join(bundle,'src/studio-plugins.mjs'),'// corrupted');
   const result=spawnSync(process.execPath,[join(bundle,'scripts/update.mjs'),'--studio',root,'--apply'],{encoding:'utf8'});
@@ -104,10 +106,15 @@ test('the updater requires an explicit check or apply mode',()=>{
 
 test('packager makes a deterministic allowlisted archive with a verifiable digest',async t=>{
   const out=await mkdtemp(join(tmpdir(),'kibi-module-pack-'));t.after(()=>rm(out,{recursive:true,force:true}));
+  const r1='kibi-studio-server-modules-20261117-r1.tar.gz',publishedR1=await readFile(join(overlay,'dist',r1));
+  assert.equal(sha(publishedR1),'0265ec18124013c1cc3ce55425d5becb594ebd9f6586523e4976c2fdf65d9643');
+  await writeFile(join(out,r1),publishedR1);
   const packageScript=join(overlay,'scripts/package.mjs');
   const build=()=>spawnSync(process.execPath,[packageScript,'--out',out],{encoding:'utf8'});
   const first=build();assert.equal(first.status,0,first.stderr);
   const metadata=JSON.parse(first.stdout),archive=await readFile(join(out,metadata.archive));
+  assert.equal(metadata.release,'studio-server-modules-2026-11-18-r2');assert.equal(metadata.archive,'kibi-studio-server-modules-20261118-r2.tar.gz');
+  assert.deepEqual(await readFile(join(out,r1)),publishedR1);
   assert.equal(sha(archive),metadata.sha256);
   const second=build();assert.equal(second.status,0,second.stderr);
   assert.equal(JSON.parse(second.stdout).sha256,metadata.sha256);
@@ -116,13 +123,22 @@ test('packager makes a deterministic allowlisted archive with a verifiable diges
   const names=listing.stdout.trim().split('\n');
   assert.ok(names.includes('kibi-studio-server-modules/scripts/update.mjs'));
   assert.ok(names.includes('kibi-studio-server-modules/src/studio-plugins.mjs'));
+  assert.ok(names.includes('kibi-studio-server-modules/src/server.mjs'));assert.ok(names.includes('kibi-studio-server-modules/src/attachment-assets.mjs'));assert.ok(names.includes('kibi-studio-server-modules/docs/CHAT_PHOTOS.md'));
   assert.ok(names.every(name=>!name.includes('/.studio/')&&!name.includes('/projects/')&&!name.includes('/tests/')&&!name.includes('auth.json')));
   if(fixture){
     const unpacked=spawnSync('tar',['-xzf',join(out,metadata.archive),'-C',out],{encoding:'utf8'});assert.equal(unpacked.status,0,unpacked.stderr);
     const root=await target(t);
     const checked=spawnSync(process.execPath,[join(out,'kibi-studio-server-modules/scripts/update.mjs'),'--studio',root,'--check'],{encoding:'utf8'});
-    assert.equal(checked.status,0,checked.stderr);assert.equal(JSON.parse(checked.stdout).changes.length,14);
+    assert.equal(checked.status,0,checked.stderr);assert.equal(JSON.parse(checked.stdout).changes.length,17);
   }
+});
+
+test('packager refuses to overwrite an existing same-name r2 archive with different bytes',async t=>{
+  const out=await mkdtemp(join(tmpdir(),'kibi-r2-immutable-'));t.after(()=>rm(out,{recursive:true,force:true}));
+  const filename=join(out,'kibi-studio-server-modules-20261118-r2.tar.gz'),published=Buffer.from('existing immutable public artifact');
+  await writeFile(filename,published);
+  const result=spawnSync(process.execPath,[join(overlay,'scripts/package.mjs'),'--out',out],{encoding:'utf8'});
+  assert.equal(result.status,1);assert.match(result.stderr,/Refusing to replace an existing immutable overlay archive/);assert.deepEqual(await readFile(filename),published);
 });
 
 
@@ -146,7 +162,7 @@ test('a pinned previously shipped server-modules candidate can receive instructi
   await mkdir(join(root,'projects'));await writeFile(join(root,'projects/untouched'),'synthetic preserved project');
   await mkdir(join(root,'.studio'));await writeFile(join(root,'.studio/untouched'),'synthetic preserved state');
   const checked=run('--studio',root,'--check');assert.equal(checked.status,0,checked.stderr);
-  assert.deepEqual(JSON.parse(checked.stdout).changes,['src/studio-platform.mjs','web/server-modules.js',...guideTargets]);
+  assert.deepEqual(JSON.parse(checked.stdout).changes,['src/studio-platform.mjs','web/server-modules.js','src/server.mjs','src/attachment-assets.mjs',...guideTargets,'docs/CHAT_PHOTOS.md']);
   const applied=run('--studio',root,'--apply');assert.equal(applied.status,0,applied.stderr);
   assert.deepEqual(JSON.parse(run('--studio',root,'--check').stdout).changes,[]);
   assert.equal(await readFile(join(root,'projects/untouched'),'utf8'),'synthetic preserved project');
@@ -157,7 +173,7 @@ test('a pinned previously shipped server-modules candidate can receive instructi
 test('editing accepted previous hashes cannot bypass the pinned upgrade provenance',integration,async t=>{
   const root=await target(t),bundle=await mkdtemp(join(tmpdir(),'kibi-module-pinned-history-'));
   t.after(()=>rm(bundle,{recursive:true,force:true}));
-  const names=['scripts/update.mjs','manifests/baselines.json','manifests/previous-releases.json','release.json','src/studio-account.mjs','src/studio-platform.mjs','src/studio-plugins.mjs','web/app.js','web/index.html','web/server-modules.js','web/server-modules.css',...guideTargets];
+  const names=['scripts/update.mjs','manifests/baselines.json','manifests/previous-releases.json','release.json','src/studio-account.mjs','src/studio-platform.mjs','src/studio-plugins.mjs','src/server.mjs','src/attachment-assets.mjs','web/app.js','web/index.html','web/server-modules.js','web/server-modules.css',...guideTargets,'docs/CHAT_PHOTOS.md'];
   for(const name of names){await mkdir(dirname(join(bundle,name)),{recursive:true});await copyFile(join(overlay,name),join(bundle,name));}
   const previous=JSON.parse(await readFile(join(bundle,'manifests/previous-releases.json'),'utf8'));
   previous.releases[0].files['src/studio-platform.mjs']='f'.repeat(64);
@@ -169,6 +185,32 @@ test('editing accepted previous hashes cannot bypass the pinned upgrade provenan
 });
 
 const guideTargets=['docs/API.md','docs/SDK.md','docs/LOCAL_STUDIO.md','docs/SERVER_MODULES.md','docs/SERVER_MODULES_DEPLOY.md','docs/YOUTUBE_MODULE.md','src/platform-guides/API.md'];
+
+test('published r1 archive and its exact fourteen target hashes remain accepted',async()=>{
+  const archive=await readFile(join(overlay,'dist/kibi-studio-server-modules-20261117-r1.tar.gz'));
+  assert.equal(sha(archive),'0265ec18124013c1cc3ce55425d5becb594ebd9f6586523e4976c2fdf65d9643');
+  const previous=JSON.parse(await readFile(join(overlay,'manifests/previous-releases.json')));
+  const published=previous.releases.find(row=>row.archiveSha256==='0265ec18124013c1cc3ce55425d5becb594ebd9f6586523e4976c2fdf65d9643');
+  assert.ok(published);assert.equal(Object.keys(published.files).length,14);
+  for(const name of guideTargets)assert.equal(sha(await readFile(join(overlay,name))),published.files[name],name);
+});
+
+test('the exact published r1 cohort upgrades only the photo targets and is idempotent',integration,async t=>{
+  const root=await target(t),bundle=await mkdtemp(join(tmpdir(),'kibi-r1-public-'));
+  t.after(()=>rm(bundle,{recursive:true,force:true}));
+  const archive=join(overlay,'dist/kibi-studio-server-modules-20261117-r1.tar.gz');
+  assert.equal(sha(await readFile(archive)),'0265ec18124013c1cc3ce55425d5becb594ebd9f6586523e4976c2fdf65d9643');
+  const unpacked=spawnSync('tar',['-xzf',archive,'-C',bundle],{encoding:'utf8'});assert.equal(unpacked.status,0,unpacked.stderr);
+  const r1=join(bundle,'kibi-studio-server-modules'),release=JSON.parse(await readFile(join(r1,'release.json')));
+  assert.equal(Object.keys(release.files).length,14);
+  for(const[name,hash]of Object.entries(release.files)){
+    const bytes=await readFile(join(r1,name));assert.equal(sha(bytes),hash,name);await mkdir(dirname(join(root,name)),{recursive:true});await writeFile(join(root,name),bytes);
+  }
+  const checked=run('--studio',root,'--check');assert.equal(checked.status,0,checked.stderr);
+  assert.deepEqual(JSON.parse(checked.stdout).changes,['src/studio-platform.mjs','src/server.mjs','src/attachment-assets.mjs','docs/CHAT_PHOTOS.md']);
+  const applied=run('--studio',root,'--apply');assert.equal(applied.status,0,applied.stderr);
+  assert.deepEqual(JSON.parse(run('--studio',root,'--check').stdout).changes,[]);
+});
 async function seedGuides(root){
   const baseRoot=process.env.KIBI_STUDIO_PUBLIC_RELEASE;
   const files=decodeReleaseZip({archive:await readFile(join(baseRoot,'kibi-studio-local.zip')),manifest:JSON.parse(await readFile(join(baseRoot,'kibi-studio-local.manifest.json'),'utf8')),release:JSON.parse(await readFile(join(baseRoot,'release.json'),'utf8'))});

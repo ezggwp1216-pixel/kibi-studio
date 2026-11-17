@@ -19,6 +19,7 @@ const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:
 async function fixture(t,{beforeMutation=()=>{},respond}={}){
   const root=await mkdtemp(join(tmpdir(),'kibi-plugin-platform-')),src=join(root,'src');await mkdir(src);
   for(const name of ['studio-account.mjs','studio-plugins.mjs','studio-platform.mjs'])await copyFile(new URL('../src/'+name,import.meta.url),join(src,name));
+  for(const name of ['attachment-assets.mjs','png-raster.mjs','managed-assets.mjs'])await copyFile(new URL('../../server/studio/'+name,import.meta.url),join(src,name));
   // Unrelated resource/firmware modules are distribution dependencies. The actual
   // account and platform implementation under test are copied unchanged above.
   await writeFile(join(src,'public-resources.mjs'),"export class PublicResourceError extends Error{}; export const SDK_HEADERS={}; export const PUBLIC_ASSET_RECIPES=[]; export const createPublicResourceService=()=>({});");

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "release": "studio-server-modules-2026-11-17-r1",
+  "archive": "kibi-studio-server-modules-20261117-r1.tar.gz",
+  "bytes": 124192,
+  "sha256": "0265ec18124013c1cc3ce55425d5becb594ebd9f6586523e4976c2fdf65d9643",
+  "kind": "public-studio-overlay",
+  "fullStudio": false,
+  "files": {
+    "src/studio-account.mjs": "40cfbb801ce0eff776425e2f26b024275367aa1b8187d876cc45a71fb4f14bf7",
+    "src/studio-platform.mjs": "f2c8ab079afc03365c32c2469aa2d5f93439220ddb464ffc7b54c1c7396058a4",
+    "src/studio-plugins.mjs": "cc9c0f8917522be9682275cf69d80417b917d25b04f1ab6fe0d64eca4d43538b",
+    "web/app.js": "d6f4ac80fd3112e2c38d75435b826f480bb5df36c7ffd1651bf9e4357fa8d437",
+    "web/index.html": "303d29ccf5a8aac2ac149bad4dafe6931547fd455646da763c90128fb57b331f",
+    "web/server-modules.js": "306cba3837cfb652bbd270619647af4a8a326965bd16561a48c68635b4a286fb",
+    "web/server-modules.css": "aa19b1c2638f958b4d0449d55ff31a12cbe8bd368551906adfb055797f546425",
+    "docs/API.md": "a9275942ea478aaa13d62b7653694cabfe9493804c765f272b83a9fb35c64f44",
+    "docs/SDK.md": "a22ef3a06e9f19f2c25347498ee07b4cafca64989ab58b8acb7f3d43bed47090",
+    "docs/LOCAL_STUDIO.md": "e10c5adcfd2fbff4cc2d5158f98aa7a29696f61f6e703d438e28c3b202bc7b0a",
+    "docs/SERVER_MODULES.md": "bd6ea0611d29784915a5a9e3fd4121c8e89972e32afbd27c3c24b0ed9a0d7f4f",
+    "docs/SERVER_MODULES_DEPLOY.md": "2d01acb084975cbcb964f6a0d8e5bb5d96a7bfa047d692e4c397b1975f9a0d3f",
+    "docs/YOUTUBE_MODULE.md": "a8f80ab978409493cefc329efb2c0b95e28240f2ababfabde908dd2cd188ad4c",
+    "src/platform-guides/API.md": "a9275942ea478aaa13d62b7653694cabfe9493804c765f272b83a9fb35c64f44",
+    "scripts/update.mjs": "bf81d4b76f54d49e3697fe7edfb72954ca3f16bf12ac684de905101f65893ee2",
+    "scripts/package.mjs": "33efc7c686089b0e9a756b40931eccdd5b162bde846a188620e5d9857f42a564",
+    "manifests/baselines.json": "3522c57a2434a37f8eef35d556aa6b4d55e3bd309e0484be6e4a83b81b8c1c96",
+    "manifests/previous-releases.json": "9ac3aefbccd9a18ee016bee9270d8405df87645c44389c527f1309c45a9b49e9",
+    "manifests/github-baseline-verification.json": "8a2bafc3e02f719ee0017cdaef8e8844b684194d746f1b31ff393fd2b0933c94",
+    "README.md": "361581b467f2e120615c30ab0544b9120e2b4657316bb19f4c8a88ed011843b2",
+    "release.json": "8e462e20bbcb9f16be0777153dd4542a046529e1cc41b185afd76387ddc655c3"
+  }
+}

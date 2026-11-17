@@ -9,7 +9,8 @@ import {PAYLOAD_FILES} from './update.mjs';
 
 const overlay=fileURLToPath(new URL('../',import.meta.url));
 const BASE_COMMIT='5c82a27e8ca72658ace8d0cd3e7aff2494072ad3';
-const RELEASE='studio-full-server-modules-20261117-rc1';
+const RELEASE='studio-full-2026-11-18-r2';
+const PREVIOUS_RELEASE_COMMIT='49685789039da6cff8f45ffeb4a3d40b6fa245b9';
 const BASE_ZIP_SHA='5c6560f205a3536fd38e8f03801f3ccdbd934aa7d15aeb3bf93ab2acf60cc4bb';
 const BASE_MANIFEST_SHA='374736db38271ade664cbc6ff53a4e878d466f41167433cc7e1dcc868dfb3564';
 const BASE_RELEASE_SHA='fd0594a34d8bc98b25a4a3a68190b6de1d0220fe3bdf8de17ec94a4b2cb9bcf2';
@@ -50,7 +51,9 @@ PUBLISH.md и verification.json — отчёты, они не заменяют �
    bootstrap.py и runtime-lock.json. Любой из них от другого релиза даёт смешанную
    установку и не допускается. SHA-файл рядом с ZIP проверяет повреждение; доверенный
    источник и новый точный Git SHA проверяются отдельно.
-2. После публикации получите НОВЫЙ точный 40-символьный Git commit и проверьте
+2. После root commit/push один раз разрешите refs/heads/main в НОВЫЙ точный
+   40-символьный Git commit. Сохраните этот SHA и используйте его для всех raw
+   файлов cohort; не разрешайте main повторно между загрузками. Проверьте
    публичные raw файлы этого commit по publication.json. baseCommit/sourceCommit
    5c82a27e8ca72658ace8d0cd3e7aff2494072ad3 — происхождение, не адрес нового ZIP.
    Использование этого старого SHA поставит старую Studio. Не объявляйте новый SHA
@@ -64,16 +67,16 @@ PUBLISH.md и verification.json — отчёты, они не заменяют �
    Сверьте bootstrap.sh с доверенным значением до запуска. install-only не запускает
    модель или Codex login, но скачивает проверенный private Node/Codex/browser runtime;
    такой install в этой сборочной проверке не выполнялся. Не выдавайте verifyKit
-   за завершённую сетевую установку. После установки отдельно проверьте 14
+   за завершённую сетевую установку. После установки отдельно проверьте 17
    named файлов overlay по resources/server-modules-release.json.
 
 Для СУЩЕСТВУЮЩЕЙ поддерживаемой Studio используйте отдельный overlay updater
-из kibi-studio-server-modules-20261117-r1.tar.gz, а не полный ZIP/bootstrap поверх неё.
-Остановите Studio, сохраните существовавшие 14 named targets и список отсутствовавших путей для возврата
+из kibi-studio-server-modules-20261118-r2.tar.gz, а не полный ZIP/bootstrap поверх неё.
+Остановите Studio, сохраните существовавшие 17 named targets и список отсутствовавших путей для возврата
 и примените scripts/update.mjs --studio /absolute/existing-studio --check, затем
 --apply и --check. Разрешены базовая публичная Studio, закреплённый предыдущий
 candidate и точные новые preimages; неизвестные локальные изменения отклоняются.
-Updater читает только 26 guard/dependency и 14 named target paths. Он не сканирует
+Updater читает только 26 guard/dependency и 17 named target paths. Он не сканирует
 projects, .studio, auth/settings/accounts, private runtime или прошивки и не меняет
 project/config/build/flash guards. Нельзя использовать полный installer как updater.
 При обычной ошибке записи старые программные файлы возвращаются; interrupted update
@@ -88,17 +91,21 @@ invoke, Docker/media доступ, видео, звук или физическ�
 
 const readme=`# Киби Studio: непубликованный кандидат
 
-Это полный кандидат studio-full-server-modules-20261117-rc1 с серверными модулями.
+Это полный кандидат studio-full-2026-11-18-r2 с серверными модулями и локальным импортом фото из чата.
 Версия программы остаётся 0.3.1. Кандидат ещё не опубликован: GitHub main не
 утверждается источником этого ZIP. sourceCommit/baseCommit обозначают только
 происхождение от публичной поставки 5c82a27e8ca72658ace8d0cd3e7aff2494072ad3,
-а не Git-коммит нового кандидата. Новый GitHub SHA не создавался.
+а не Git-коммит нового кандидата. Новый GitHub SHA не создавался. Предыдущая
+опубликованная Studio находится в commit 49685789039da6cff8f45ffeb4a3d40b6fa245b9;
+это тоже не install pin нового R2.
 
 ZIP и manifest собраны из проверенного публичного release-candidate-4. Изменены
-семь программных файлов Studio integration, семь canonical guide targets и строго
+17 именованных целей Studio integration (девять программных и восемь инструкций) и строго
 закреплённое исправление scripts/bootstrap.mjs; добавлен публичный
 resources/server-modules-release.json. Нейтральный projects/kibi-base и все
-templates сохранены побайтно. Установленная Studio и QA-каталоги не были input. Документация приведена к v2; аппаратные контракты и все 135 neutral template/project файлов сохранены побайтно.
+templates сохранены побайтно. Установленная Studio и QA-каталоги не были input.
+Шесть canonical guides r4 и src/platform-guides/API.md сохранены от r1 без изменений;
+добавлена docs/CHAT_PHOTOS.md. Аппаратные контракты и все 135 neutral template/project файлов сохранены побайтно.
 
 Проверьте kibi-studio-local.zip по .sha256 и release.json; verification.json
 содержит доказательства decode roundtrip, bootstrap.verifyKit и updater --check
@@ -146,7 +153,7 @@ export async function packageFullStudio({baseDir,outputDir,helperFile=fileURLToP
 
   const overlayReleaseBytes=await ordinary(path.join(overlay,'release.json'));
   const overlayRelease=JSON.parse(overlayReleaseBytes);
-  if(overlayRelease.schemaVersion!==1||overlayRelease.release!=='studio-server-modules-2026-11-17-r1'||Object.keys(overlayRelease.files||{}).length!==14)throw fail('full_package_payload_mismatch');
+  if(overlayRelease.schemaVersion!==1||overlayRelease.release!=='studio-server-modules-2026-11-18-r2'||Object.keys(overlayRelease.files||{}).length!==17)throw fail('full_package_payload_mismatch');
   const files=new Map(baseFiles),changed=[],added=[],payload=new Map();
   for(const name of PAYLOAD_FILES){
     const bytes=await ordinary(path.join(overlay,name));
@@ -170,7 +177,7 @@ export async function packageFullStudio({baseDir,outputDir,helperFile=fileURLToP
   bootstraps.set('bootstrap.mjs',fixedBootstrapBytes);
   files.set('scripts/bootstrap.mjs',fixedBootstrapBytes);changed.push('scripts/bootstrap.mjs');
   const output=encodeFullPackage(files,{version:'0.3.1',releaseName:RELEASE,publicSdkExceptions:baseManifest.publicSdkExceptions||[]});
-  Object.assign(output.release,{sourceCommit:BASE_COMMIT,baseCommit:BASE_COMMIT,baseRelease:baseRelease.release,baseArchiveSha256:BASE_ZIP_SHA,published:false,candidate:true});
+  Object.assign(output.release,{sourceCommit:BASE_COMMIT,baseCommit:BASE_COMMIT,previousReleaseCommit:PREVIOUS_RELEASE_COMMIT,baseRelease:baseRelease.release,baseArchiveSha256:BASE_ZIP_SHA,published:false,candidate:true});
   for(const[name,key]of bootstrapNames)output.release[key]=digest(bootstraps.get(name));
   const decoded=decodeReleaseZip(output);
   if(decoded.size!==files.size)throw fail('full_package_roundtrip_failed');

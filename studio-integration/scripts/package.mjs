@@ -9,7 +9,7 @@ const root=fileURLToPath(new URL('../',import.meta.url));
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const args=process.argv.slice(2);
 if(args.length!==2||args[0]!=='--out'||!path.isAbsolute(args[1]))throw new Error('Use Node 24: node scripts/package.mjs --out /absolute/output');
-const output=args[1],archive='kibi-studio-server-modules-20261117-r1.tar.gz';
+const output=args[1],archive='kibi-studio-server-modules-20261118-r2.tar.gz';
 const files=[...PAYLOAD_FILES,'scripts/update.mjs','scripts/package.mjs','manifests/baselines.json','manifests/previous-releases.json','manifests/github-baseline-verification.json','README.md'];
 const payload=new Map();
 // This builder reads named public source files, never an installation or directory tree.
@@ -18,7 +18,7 @@ for(const name of files){
   if(!info.isFile()||info.isSymbolicLink()||info.nlink!==1||info.size>2*1024*1024||await realpath(filename)!==filename)throw new Error('Unsafe public payload: '+name);
   payload.set(name,await readFile(filename));
 }
-const release={schemaVersion:1,release:'studio-server-modules-2026-11-17-r1',kind:'public-studio-overlay',fullStudio:false,files:Object.fromEntries(PAYLOAD_FILES.map(name=>[name,sha(payload.get(name))]))};
+const release={schemaVersion:1,release:'studio-server-modules-2026-11-18-r2',kind:'public-studio-overlay',fullStudio:false,files:Object.fromEntries(PAYLOAD_FILES.map(name=>[name,sha(payload.get(name))]))};
 const releaseBytes=Buffer.from(JSON.stringify(release,null,2)+'\n');
 payload.set('release.json',releaseBytes);
 // Keep source checks and package checks on the same generated manifest.
@@ -37,6 +37,8 @@ for(const[name,bytes]of payload){
 chunks.push(Buffer.alloc(1024));
 const packed=gzipSync(Buffer.concat(chunks),{level:9}),metadata={schemaVersion:1,release:release.release,archive,bytes:packed.length,sha256:sha(packed),kind:release.kind,fullStudio:false,files:Object.fromEntries([...payload].map(([name,bytes])=>[name,sha(bytes)]))};
 await mkdir(output,{recursive:true});
+const existing=await readFile(path.join(output,archive)).catch(error=>{if(error.code==='ENOENT')return null;throw error;});
+if(existing&&!existing.equals(packed))throw new Error('Refusing to replace an existing immutable overlay archive');
 await writeFile(path.join(output,archive),packed);
 await writeFile(path.join(output,archive+'.sha256'),metadata.sha256+'  '+archive+'\n');
 await writeFile(path.join(output,'release.json'),JSON.stringify(metadata,null,2)+'\n');

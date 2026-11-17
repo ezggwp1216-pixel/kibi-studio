@@ -13,7 +13,7 @@ const base=process.env.KIBI_STUDIO_PUBLIC_RELEASE;
 const lineage='5c82a27e8ca72658ace8d0cd3e7aff2494072ad3';
 const fixedBootstrap=fileURLToPath(new URL('../../bootstrap.mjs',import.meta.url));
 const fixedBootstrapSha='adfc7eb70bdea022b70b95c8e733e29e51e6dc423e4c0fe3069bf8eb834615f7';
-const payload=['src/studio-account.mjs','src/studio-platform.mjs','src/studio-plugins.mjs','web/app.js','web/index.html','web/server-modules.js','web/server-modules.css','docs/API.md','docs/SDK.md','docs/LOCAL_STUDIO.md','docs/SERVER_MODULES.md','docs/SERVER_MODULES_DEPLOY.md','docs/YOUTUBE_MODULE.md','src/platform-guides/API.md'];
+const payload=['src/studio-account.mjs','src/studio-platform.mjs','src/studio-plugins.mjs','web/app.js','web/index.html','web/server-modules.js','web/server-modules.css','src/server.mjs','src/attachment-assets.mjs','docs/API.md','docs/SDK.md','docs/LOCAL_STUDIO.md','docs/SERVER_MODULES.md','docs/SERVER_MODULES_DEPLOY.md','docs/YOUTUBE_MODULE.md','src/platform-guides/API.md','docs/CHAT_PHOTOS.md'];
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const run=(...args)=>spawnSync(process.execPath,[join(overlay,'scripts/package-full.mjs'),...args],{encoding:'utf8',timeout:120000,maxBuffer:1024*1024});
 async function scratch(t){const dir=await mkdtemp(join(tmpdir(),'kibi-modules-full-'));t.after(()=>rm(dir,{recursive:true,force:true}));return dir;}
@@ -23,7 +23,7 @@ test('full candidate includes only named program, guide and pinned bootstrap cha
   const dir=await scratch(t),out=join(dir,'candidate');
   const result=run('--base-dir',base,'--out',out);assert.equal(result.status,0,result.stderr);
   const report=JSON.parse(result.stdout),release=JSON.parse(await readFile(join(out,'release.json'),'utf8'));
-  assert.equal(release.release,'studio-full-server-modules-20261117-rc1');assert.equal(release.version,'0.3.1');
+  assert.equal(release.release,'studio-full-2026-11-18-r2');assert.equal(release.version,'0.3.1');
   assert.equal(release.bootstrapNodeSha256,fixedBootstrapSha);
   assert.deepEqual(await readFile(join(out,'bootstrap.mjs')),await readFile(fixedBootstrap));
   assert.equal(release.sourceCommit,lineage);assert.equal(release.baseCommit,lineage);assert.equal(release.published,false);
@@ -38,13 +38,16 @@ test('full candidate includes only named program, guide and pinned bootstrap cha
   for(const[name,bytes]of before){assert.ok(after.has(name),name);if(!after.get(name).equals(bytes))changed.push(name);}
   assert.deepEqual(changed.sort(),[...payload.filter(name=>before.has(name)),'scripts/bootstrap.mjs'].sort());
   for(const name of payload)assert.deepEqual(after.get(name),await readFile(join(overlay,name)));
-  for(const name of payload.filter(name=>name.startsWith('docs/')||name.startsWith('src/platform-guides/')))assert.deepEqual(after.get(name),await readFile(join(overlay,'../server/docs',name.split('/').at(-1))),name);
+  for(const name of payload.filter(name=>name!=='docs/CHAT_PHOTOS.md'&&(name.startsWith('docs/')||name.startsWith('src/platform-guides/'))))assert.deepEqual(after.get(name),await readFile(join(overlay,'../server/docs',name.split('/').at(-1))),name);
+  const publishedR1=JSON.parse(await readFile(join(overlay,'manifests/previous-releases.json'))).releases.find(row=>row.archiveSha256==='0265ec18124013c1cc3ce55425d5becb594ebd9f6586523e4976c2fdf65d9643');
+  for(const name of payload.filter(name=>name!=='docs/CHAT_PHOTOS.md'&&(name.startsWith('docs/')||name.startsWith('src/platform-guides/'))))assert.equal(sha(after.get(name)),publishedR1.files[name],name);
   assert.deepEqual([...after.keys()].filter(name=>!before.has(name)).sort(),[...payload.filter(name=>!before.has(name)),'resources/server-modules-release.json'].sort());
   const neutral=[...before].filter(([name])=>name.startsWith('projects/kibi-base/')||name.startsWith('templates/'));
   assert.equal(neutral.length,135);for(const[name,bytes]of neutral)assert.deepEqual(after.get(name),bytes,name);
   assert.equal(JSON.parse(after.get('package.json')).version,'0.3.1');
   const metadata=JSON.parse(after.get('resources/server-modules-release.json'));
   assert.equal(metadata.published,false);assert.equal(metadata.sourceCommit,lineage);
+  assert.equal(metadata.overlayRelease,'studio-server-modules-2026-11-18-r2');assert.equal(Object.keys(metadata.files).length,17);
   for(const[name,key]of [['bootstrap.sh','bootstrapShellSha256'],['bootstrap.mjs','bootstrapNodeSha256'],['bootstrap.py','bootstrapSha256'],['runtime-lock.json','runtimeLockSha256']]){
     const bytes=await readFile(join(out,name));
     assert.deepEqual(bytes,await readFile(name==='bootstrap.mjs'?fixedBootstrap:join(base,name)));
