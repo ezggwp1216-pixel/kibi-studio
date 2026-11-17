@@ -1,16 +1,19 @@
 {
   "schemaVersion": 1,
+  "release": "studio-full-2026-11-17-r3",
   "archive": "kibi-studio-local.zip",
-  "sha256": "d6707edbbcea2ed631dc7dcfb1d4ecabf487dae839ae4c3003f7529a03ce4f58",
-  "bytes": 21744510,
-  "expandedBytes": 75036386,
-  "fileCount": 2613,
+  "sha256": "5c6560f205a3536fd38e8f03801f3ccdbd934aa7d15aeb3bf93ab2acf60cc4bb",
+  "bytes": 21324722,
+  "expandedBytes": 75728917,
+  "fileCount": 2650,
   "root": "kibi-studio",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "platform": "darwin",
-  "bootstrapSha256": "e58a2be4863478ba4c7f484df679681d81bbd793309d8161051f8c7f2b675d3d",
+  "fullStudio": true,
+  "manifestSha256": "374736db38271ade664cbc6ff53a4e878d466f41167433cc7e1dcc868dfb3564",
+  "sourceCommit": "43d47afb090c9bf6ab69ea46ee559da3c9867616",
   "bootstrapShellSha256": "559f5092fddfa215c4525b7c12ebffa4fe6321be4ff7b22ef23ffb3557ea027c",
   "bootstrapNodeSha256": "6cbd9d6096d2e56989e32058933687b9d7f16fbb1669f137c38190cd9ed2294a",
   "runtimeLockSha256": "4c0b17d6b96653916c50b564936166a8d634260da8c404410952ccce57b7c634",
-  "manifestSha256": "ca93f03c219cb88e442dbaa59ee584994cbb241ef47d2f6c95da607302077ee7"
+  "bootstrapSha256": "e58a2be4863478ba4c7f484df679681d81bbd793309d8161051f8c7f2b675d3d"
 }
