@@ -3,11 +3,11 @@
   "root": "kibi-studio",
   "archive": {
     "name": "kibi-studio-local.zip",
-    "size": 21324722,
-    "sha256": "5c6560f205a3536fd38e8f03801f3ccdbd934aa7d15aeb3bf93ab2acf60cc4bb"
+    "size": 21367993,
+    "sha256": "cea536f3695c928421f3d88514d3308c4e2939696b0c6b06a532fbfad48055bf"
   },
-  "fileCount": 2650,
-  "totalBytes": 75728917,
+  "fileCount": 2657,
+  "totalBytes": 75858486,
   "publicSdkExceptions": [
     "resources/native-sdk/bin/bootloader_dio_40m.elf"
   ],
@@ -44,8 +44,8 @@
     },
     {
       "path": "kibi-studio/docs/API.md",
-      "size": 30708,
-      "sha256": "619ffc0c0133975b7dcf9f813e0f377989edc5e647df38192da742dca4c2fb68"
+      "size": 35582,
+      "sha256": "a9275942ea478aaa13d62b7653694cabfe9493804c765f272b83a9fb35c64f44"
     },
     {
       "path": "kibi-studio/docs/HARDWARE.md",
@@ -54,18 +54,28 @@
     },
     {
       "path": "kibi-studio/docs/LOCAL_STUDIO.md",
-      "size": 34618,
-      "sha256": "4344b9fc54cd28127317d80488331082fe885c36d986f48ab83a2db385653af9"
+      "size": 38238,
+      "sha256": "e10c5adcfd2fbff4cc2d5158f98aa7a29696f61f6e703d438e28c3b202bc7b0a"
     },
     {
       "path": "kibi-studio/docs/SDK.md",
-      "size": 24534,
-      "sha256": "ec57a008b31d2a82d6c5887f6374226d04d2ca9e62131bfa6b92b62aa7177069"
+      "size": 29648,
+      "sha256": "a22ef3a06e9f19f2c25347498ee07b4cafca64989ab58b8acb7f3d43bed47090"
     },
     {
       "path": "kibi-studio/docs/SDK_UPDATE.md",
       "size": 8918,
       "sha256": "2d9d7a55622521a2469a692f2ea8b4114be15bfe36ead140607ec82357bbc560"
+    },
+    {
+      "path": "kibi-studio/docs/SERVER_MODULES.md",
+      "size": 13030,
+      "sha256": "bd6ea0611d29784915a5a9e3fd4121c8e89972e32afbd27c3c24b0ed9a0d7f4f"
+    },
+    {
+      "path": "kibi-studio/docs/SERVER_MODULES_DEPLOY.md",
+      "size": 20498,
+      "sha256": "2d01acb084975cbcb964f6a0d8e5bb5d96a7bfa047d692e4c397b1975f9a0d3f"
     },
     {
       "path": "kibi-studio/docs/SERVICES.md",
@@ -81,6 +91,11 @@
       "path": "kibi-studio/docs/VOICE.md",
       "size": 43469,
       "sha256": "2a34e079d80d95588ff9eccafb608bc7d8372ea03d8ec3141189710ddba4cf93"
+    },
+    {
+      "path": "kibi-studio/docs/YOUTUBE_MODULE.md",
+      "size": 14671,
+      "sha256": "a8f80ab978409493cefc329efb2c0b95e28240f2ababfabde908dd2cd188ad4c"
     },
     {
       "path": "kibi-studio/docs/development-contract.md",
@@ -12603,6 +12618,11 @@
       "sha256": "e80661f8176b53139d1635edfd88a8c336e69013fd0861178089816c7a6f34e9"
     },
     {
+      "path": "kibi-studio/resources/server-modules-release.json",
+      "size": 1924,
+      "sha256": "e09ab159f2c02263a2e65c8fec6320c2da37fda2b58e5b380831112fd74d8aaf"
+    },
+    {
       "path": "kibi-studio/scripts/bootstrap.mjs",
       "size": 17028,
       "sha256": "6cbd9d6096d2e56989e32058933687b9d7f16fbb1669f137c38190cd9ed2294a"
@@ -12714,8 +12734,8 @@
     },
     {
       "path": "kibi-studio/src/platform-guides/API.md",
-      "size": 30708,
-      "sha256": "619ffc0c0133975b7dcf9f813e0f377989edc5e647df38192da742dca4c2fb68"
+      "size": 35582,
+      "sha256": "a9275942ea478aaa13d62b7653694cabfe9493804c765f272b83a9fb35c64f44"
     },
     {
       "path": "kibi-studio/src/platform-guides/HARDWARE.md",
@@ -12789,13 +12809,18 @@
     },
     {
       "path": "kibi-studio/src/studio-account.mjs",
-      "size": 28399,
-      "sha256": "342ed5a76e722a031f7efa51eb8a35b32d7bad812f7c19eb2e4a49ac0579d591"
+      "size": 31228,
+      "sha256": "40cfbb801ce0eff776425e2f26b024275367aa1b8187d876cc45a71fb4f14bf7"
     },
     {
       "path": "kibi-studio/src/studio-platform.mjs",
-      "size": 16579,
-      "sha256": "b67c835aae8d7ac91155cb0c79170c631c352045cabcbb1be9acf7957d4f302f"
+      "size": 32118,
+      "sha256": "f2c8ab079afc03365c32c2469aa2d5f93439220ddb464ffc7b54c1c7396058a4"
+    },
+    {
+      "path": "kibi-studio/src/studio-plugins.mjs",
+      "size": 6935,
+      "sha256": "cc9c0f8917522be9682275cf69d80417b917d25b04f1ab6fe0d64eca4d43538b"
     },
     {
       "path": "kibi-studio/src/workspace.mjs",
@@ -13144,8 +13169,8 @@
     },
     {
       "path": "kibi-studio/web/app.js",
-      "size": 62422,
-      "sha256": "12ef062c92e14e451624be9e4073cda5dad5bd59d831f855f3e7f2e295921ef2"
+      "size": 62557,
+      "sha256": "d6f4ac80fd3112e2c38d75435b826f480bb5df36c7ffd1651bf9e4357fa8d437"
     },
     {
       "path": "kibi-studio/web/assets/SourceSans3-OFL.txt",
@@ -13164,8 +13189,8 @@
     },
     {
       "path": "kibi-studio/web/index.html",
-      "size": 19192,
-      "sha256": "3e138bc2e6b8dd10b1c6c803866903888d1ae557acf41ac4d5e55ed45500e6c2"
+      "size": 19244,
+      "sha256": "303d29ccf5a8aac2ac149bad4dafe6931547fd455646da763c90128fb57b331f"
     },
     {
       "path": "kibi-studio/web/local-install-source.js",
@@ -13196,6 +13221,16 @@
       "path": "kibi-studio/web/runtime.css",
       "size": 21180,
       "sha256": "a2559b29c86c0fa1ae4b8ed940ba35b4fa46bb18d72e51322a6c8d2c9601f8c3"
+    },
+    {
+      "path": "kibi-studio/web/server-modules.css",
+      "size": 8908,
+      "sha256": "aa19b1c2638f958b4d0449d55ff31a12cbe8bd368551906adfb055797f546425"
+    },
+    {
+      "path": "kibi-studio/web/server-modules.js",
+      "size": 26566,
+      "sha256": "306cba3837cfb652bbd270619647af4a8a326965bd16561a48c68635b4a286fb"
     },
     {
       "path": "kibi-studio/web/settings.css",

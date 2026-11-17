@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "release": "studio-server-modules-2026-11-17-r1",
+  "kind": "public-studio-overlay",
+  "fullStudio": false,
+  "files": {
+    "src/studio-account.mjs": "40cfbb801ce0eff776425e2f26b024275367aa1b8187d876cc45a71fb4f14bf7",
+    "src/studio-platform.mjs": "f2c8ab079afc03365c32c2469aa2d5f93439220ddb464ffc7b54c1c7396058a4",
+    "src/studio-plugins.mjs": "cc9c0f8917522be9682275cf69d80417b917d25b04f1ab6fe0d64eca4d43538b",
+    "web/app.js": "d6f4ac80fd3112e2c38d75435b826f480bb5df36c7ffd1651bf9e4357fa8d437",
+    "web/index.html": "303d29ccf5a8aac2ac149bad4dafe6931547fd455646da763c90128fb57b331f",
+    "web/server-modules.js": "306cba3837cfb652bbd270619647af4a8a326965bd16561a48c68635b4a286fb",
+    "web/server-modules.css": "aa19b1c2638f958b4d0449d55ff31a12cbe8bd368551906adfb055797f546425",
+    "docs/API.md": "a9275942ea478aaa13d62b7653694cabfe9493804c765f272b83a9fb35c64f44",
+    "docs/SDK.md": "a22ef3a06e9f19f2c25347498ee07b4cafca64989ab58b8acb7f3d43bed47090",
+    "docs/LOCAL_STUDIO.md": "e10c5adcfd2fbff4cc2d5158f98aa7a29696f61f6e703d438e28c3b202bc7b0a",
+    "docs/SERVER_MODULES.md": "bd6ea0611d29784915a5a9e3fd4121c8e89972e32afbd27c3c24b0ed9a0d7f4f",
+    "docs/SERVER_MODULES_DEPLOY.md": "2d01acb084975cbcb964f6a0d8e5bb5d96a7bfa047d692e4c397b1975f9a0d3f",
+    "docs/YOUTUBE_MODULE.md": "a8f80ab978409493cefc329efb2c0b95e28240f2ababfabde908dd2cd188ad4c",
+    "src/platform-guides/API.md": "a9275942ea478aaa13d62b7653694cabfe9493804c765f272b83a9fb35c64f44"
+  }
+}

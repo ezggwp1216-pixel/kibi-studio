@@ -1,0 +1,34 @@
+#pragma once
+#include "kibi_device_config.h"
+#include <stddef.h>
+#include <stdint.h>
+
+// Confirmed configuration of the current working project. Hardware registers,
+// orientation and persisted touch calibration remain in display_touch.h.
+namespace Tamagotchi {
+constexpr int kScreenWidth=240, kScreenHeight=296, kScreenCornerRadius=62;
+constexpr size_t kFramePixelCount=size_t(kScreenWidth)*kScreenHeight;
+constexpr size_t kFrameBytes=kFramePixelCount*sizeof(uint16_t);
+constexpr uint32_t kAudioSampleRate=16000, kAudioMaxSeconds=300, kAudioCommandMaxSeconds=30;
+constexpr int kNoteTitleBytes=96, kNoteTextBytes=32768, kMaxNotes=64;
+constexpr size_t kNotesQuotaBytes=1024*1024;
+// Display/power policy, not a calibrated state-of-charge measurement.
+constexpr int kBatteryFullDisplayThreshold=85;
+// This DS02's observed end-of-charge plateau: RAW2482..2483 after 171 s
+// with CHRG inactive and USB connected (2026-10-22). Indicator, not fuel gauge.
+constexpr int kBatteryFullRaw=2482;
+constexpr bool batteryDisplayFull(int percent) {
+  return percent>kBatteryFullDisplayThreshold && percent<=100;
+}
+static_assert(kFrameBytes==142080,"Preserve the working 240x296 RGB565 framebuffer");
+namespace Board {
+constexpr int kSclk=9,kMosi=10,kDc=8,kCs=14,kReset=18,kBacklight=13;
+constexpr int kSda=12,kScl=11;
+constexpr uint32_t kI2cHz=100000;
+constexpr uint8_t kTouchAddress=0x15,kMicAddress=0x40;
+constexpr int kPlus=40,kMinus=39,kTouchIrq=1,kBattery=17,kCharging=47,kAmplifier=4;
+constexpr int kMicMclk=5,kMicBclk=15,kMicWs=16,kMicDin=7;
+// OSTB DS-02 / ES8311 I2S output; variant gating stays in the adapter.
+constexpr int kSpeakerDout=6;
+}
+}  // namespace Tamagotchi

@@ -1,0 +1,51 @@
+# Optional overlay: docker compose -f compose.yaml -f compose.plugins.yaml up -d
+# The rootless worker daemon is separate from the daemon hosting these services.
+services:
+  kibi:
+    environment:
+      KIBI_PLUGIN_BROKER_SOCKET: /run/kibi-executor/worker.sock
+    volumes:
+      - type: volume
+        source: kibi-executor-ipc
+        target: /run/kibi-executor
+        read_only: true
+    depends_on:
+      kibi-plugin-broker:
+        condition: service_started
+  kibi-plugin-broker:
+    build:
+      context: .
+      dockerfile: workers/broker/Dockerfile
+      args:
+        KIBI_UID: ${KIBI_UID:-1000}
+        KIBI_GID: ${KIBI_GID:-1000}
+    image: kibi-plugin-broker:server-modules-rc1
+    user: "${KIBI_UID:-1000}:${KIBI_GID:-1000}"
+    read_only: true
+    init: true
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 96
+    mem_limit: 256m
+    cpus: 0.5
+    # An uncertain worker/socket cleanup requires operator verification first.
+    restart: "no"
+    stop_grace_period: 35s
+    environment:
+      KIBI_PLUGIN_BROKER_SOCKET: /run/kibi-executor/worker.sock
+      KIBI_PLUGIN_RUNTIME_ENABLED: "1"
+      KIBI_PLUGIN_MEDIA_ENABLED: "1"
+      KIBI_PLUGIN_RUNTIME_IMAGE: ${KIBI_PLUGIN_RUNTIME_IMAGE:?Set the verified worker image ID or digest}
+      KIBI_PLUGIN_MEDIA_IMAGE: ${KIBI_PLUGIN_MEDIA_IMAGE:?Set the verified media image ID or digest}
+    volumes:
+      - type: volume
+        source: kibi-executor-ipc
+        target: /run/kibi-executor
+      - type: bind
+        source: ${KIBI_WORKER_DOCKER_SOCKET:?Set the dedicated rootless worker Docker socket}
+        target: /var/run/docker.sock
+        bind:
+          create_host_path: false
+volumes:
+  kibi-executor-ipc:

@@ -1,0 +1,13 @@
+# Kibi Server
+
+Read docs/API.md and docs/superpowers/specs/2026-11-08-kibi-server-design.md. This is the public, standalone server module and website, separate from private Kibi Studio and the existing cloud infrastructure. Never read/copy their projects, credentials, protected app data or personalized firmware here.
+
+Node 24, no runtime npm dependencies. web/ is shipped with the server; use exact API contract in docs/API.md. User-facing language is Russian. Palette #202D85/#FA9442/#FAF6EF and bundled Manrope with OFL. Live data comes from API; no fabricated devices or module readiness. Voice is implemented as an opt-in private TLS gateway: read docs/VOICE.md. Report its actual status; listening does not prove OpenAI access or physical audio. Schedules remain planned.
+
+Accounts are scoped by trusted server sessions, never a client owner ID. Preserve the existing owner data and voice pilot. Registered users have separate stores/keys and can explicitly bind their own Xiaozhi; a failed personal connection never falls back to the shared pilot. The pilot still requires owner approval. Character is manually applied in the official console; MCP context is tool data, not system-prompt injection. Only implemented, user-enabled built-in actions may execute. Email is currently a login identifier without delivery/verification/recovery. Pairing poll credentials are separate from the visible short code. SDK validation never executes or installs user code; do not add eval/import/vm of uploaded source to this process. Keep docs/LOCAL_STUDIO.md and docs/SDK.md consistent with the API.
+
+Keep administrator/device credentials private, require browser Origin and CSRF for mutations, hash device tokens, encrypt integration keys on disk. Only the official Telegram HTTPS host is allowed by the built-in sender. No automatic real Telegram messages in tests or on page load. External network tests must be explicit and use an injected transport when possible.
+
+Do not commit .data, environment values, generated deployment credentials, private runtime files or logs. Docker must exclude these from its build context. Preserve data on update/reinitialization. Run node --test and documented local HTTP/browser checks before claiming a working deployment. A local test is not proof of installation on a user's VPS or physical board integration.
+
+Root controls Git publication and integration. Assigned implementation agents change only their named files; no agent may create additional agents or touch the paused voice project.

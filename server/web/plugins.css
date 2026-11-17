@@ -1,0 +1,30 @@
+/* Cabinet branding for the shared server-module component. */
+.plugins-panel{display:flex;align-items:center;justify-content:space-between;gap:28px;padding:24px 0;margin:0 0 28px;border-block:1px solid var(--line,#cbd0e0)}
+.plugins-panel[hidden]{display:none}
+.plugins-panel>div:first-child{max-width:660px;min-width:0}
+.plugins-panel h2{margin:8px 0 10px;font-size:25px;letter-spacing:-.035em;line-height:1.25}
+.plugins-panel p:not(.eyebrow){font-size:13px;line-height:1.8;margin:0}
+#server-modules-mount{flex:none}
+.ksm-launch,.ksm-dialog{font-family:Manrope,sans-serif;color:#202D85}
+.ksm-launch{border-color:#202D85;background:#202D85;color:#FAF6EF;white-space:normal;font-weight:750;min-height:46px}
+.ksm-launch:hover{background:#172366}
+.ksm-dialog{--ksm-text:#202D85;--ksm-muted:#536079;--ksm-line:#cbd0e0;background:#FAF6EF;color-scheme:light;border-color:var(--ksm-line);box-shadow:0 24px 90px #202d8533}
+.ksm-dialog::backdrop{background:#18205299}
+.ksm-dialog .ksm-close{border-color:var(--ksm-line);color:var(--ksm-text);background:#fff}
+.ksm-dialog .ksm-close:hover{background:#e8ebf8}
+.ksm-feedback{border-color:#FA9442;background:#f5e4d1;color:#202D85}
+.ksm-feedback.ksm-error{border-color:#202D85;background:#e8ebf8}
+.ksm-availability strong,.ksm-availability strong[data-ready=true]{color:#202D85}
+.ksm-availability strong[data-ready=true]{font-weight:800}
+.ksm-packages li,.ksm-bindings li{border-color:var(--ksm-line)}
+.ksm-dialog textarea,.ksm-dialog select,.ksm-dialog input[type=number]{background:#fff;color:var(--ksm-text);border-color:#a9b3ca}
+.ksm-dialog textarea[aria-invalid=true]{border-color:#202D85;border-width:2px}
+.ksm-toolbar .ksm-file-label{border-color:#a9b3ca;background:#fff}
+.ksm-dialog .ksm-primary{background:#202D85;border-color:#202D85;color:#FAF6EF}
+.ksm-dialog .ksm-primary:hover{background:#172366}
+.ksm-dialog .ksm-secondary{border-color:#a9b3ca;color:var(--ksm-text);background:transparent}
+.ksm-dialog .ksm-secondary:hover{background:#e8ebf8}
+.ksm-check input{accent-color:#202D85}
+.ksm-dialog :focus-visible,.ksm-launch:focus-visible,.ksm-file-label:focus-within{outline:3px solid #202D85;outline-offset:3px;box-shadow:0 0 0 2px #FA9442}
+@media(max-width:700px){.plugins-panel{align-items:flex-start;flex-direction:column;gap:18px}.plugins-panel h2{font-size:23px}.plugins-panel p:not(.eyebrow){font-size:12px}.ksm-dialog textarea[name=packageText]{font-size:16px}}
+@media(forced-colors:active){.ksm-dialog,.ksm-launch,.ksm-primary,.ksm-secondary{border-color:ButtonText}.ksm-dialog :focus-visible,.ksm-launch:focus-visible,.ksm-file-label:focus-within{outline-color:Highlight;box-shadow:none}}

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "xiaozhi",
+  "release": "xiaozhi-client-2026-11-12-r1",
+  "files": [
+    {
+      "path": "kibi_xiaozhi_core.h",
+      "bytes": 35207,
+      "sha256": "c35fb42232b78c415c4e9698f1bbe138fefa7be08b440db8aedec7a871c8983b"
+    },
+    {
+      "path": "kibi_xiaozhi_client.h",
+      "bytes": 54302,
+      "sha256": "e8a5bd22ee8b5ac3c745c7c1a35c70a0a4ba9793704b5712ac5d6ddef5b0442e"
+    }
+  ],
+  "dependencies": [
+    {
+      "path": "wifi.h",
+      "sha256": [
+        "06ef13ced44a002c88151a5e4da4be94848b662959a2ecc9df73d30e5e126e16"
+      ]
+    },
+    {
+      "path": "http_json.h",
+      "sha256": [
+        "0d71113432682654d8e08aa06fa8c31711db3d7ceb4ffb90127d7fef5c97661a"
+      ]
+    },
+    {
+      "path": "audio_codec_power.h",
+      "sha256": [
+        "1923172d1aff4be60a68bd148d4256c70fabf9d4716e0e8dbf486b9529bb49d4"
+      ]
+    },
+    {
+      "path": "server_transport.h",
+      "sha256": [
+        "604b95ef06f86e509042e29d948e6047aae70755e10881a519caae3bdb4996c9"
+      ]
+    },
+    {
+      "path": "power_management.h",
+      "sha256": [
+        "4e91470c9283f36e566a5c2cf460cd33aee2331273996c8bfbb2083a61e58c96"
+      ]
+    }
+  ]
+}

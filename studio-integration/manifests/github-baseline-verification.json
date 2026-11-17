@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "kind": "public-distribution-baseline-verification",
+  "studioVersion": "0.3.1",
+  "sourceCommit": "5c82a27e8ca72658ace8d0cd3e7aff2494072ad3",
+  "distributionManifest": "release-candidate-4/kibi-studio-local.manifest.json",
+  "distributionArchive": {
+    "name": "kibi-studio-local.zip",
+    "size": 21324722,
+    "sha256": "5c6560f205a3536fd38e8f03801f3ccdbd934aa7d15aeb3bf93ab2acf60cc4bb"
+  },
+  "baselineManifestSha256": "3522c57a2434a37f8eef35d556aa6b4d55e3bd309e0484be6e4a83b81b8c1c96",
+  "comparedFiles": 26,
+  "allMatch": true,
+  "files": [
+    {
+      "path": "package.json",
+      "baselineSha256": "d24ea8e2c731e5dc477163f4ae95dc5fc4d8bcf6b39c2c2ea58115136d0b7bfa",
+      "distributionSha256": "d24ea8e2c731e5dc477163f4ae95dc5fc4d8bcf6b39c2c2ea58115136d0b7bfa",
+      "matches": true
+    },
+    {
+      "path": "src/server.mjs",
+      "baselineSha256": "12f94f7f4ab8c34496b64a1b544f93bbe1ddfe8688a4517985d9607fbebbe194",
+      "distributionSha256": "12f94f7f4ab8c34496b64a1b544f93bbe1ddfe8688a4517985d9607fbebbe194",
+      "matches": true
+    },
+    {
+      "path": "src/project-store.mjs",
+      "baselineSha256": "78f9315c754f704b605a504d83d41468fc0f85c3f8479a5d8716e9592b8432cb",
+      "distributionSha256": "78f9315c754f704b605a504d83d41468fc0f85c3f8479a5d8716e9592b8432cb",
+      "matches": true
+    },
+    {
+      "path": "src/workspace.mjs",
+      "baselineSha256": "ff153c88b5378cad96b224c51e33f80235d72ebfae73793444457c769d634fd9",
+      "distributionSha256": "ff153c88b5378cad96b224c51e33f80235d72ebfae73793444457c769d634fd9",
+      "matches": true
+    },
+    {
+      "path": "src/build-service.mjs",
+      "baselineSha256": "66610de02ef33e06b6d5a29c9c2870684146b94afdc84b54b7550765a56a2aa4",
+      "distributionSha256": "66610de02ef33e06b6d5a29c9c2870684146b94afdc84b54b7550765a56a2aa4",
+      "matches": true
+    },
+    {
+      "path": "src/remote-build-service.mjs",
+      "baselineSha256": "7b4ebc1926ead3433ab83f716ebdcee11bdb09aad396d2e15ead42106c0f15ad",
+      "distributionSha256": "7b4ebc1926ead3433ab83f716ebdcee11bdb09aad396d2e15ead42106c0f15ad",
+      "matches": true
+    },
+    {
+      "path": "src/codex-bridge.mjs",
+      "baselineSha256": "33b76a49e155767d1499b61583770fb7391f65f19841b56bd1cbed7e20e4b26e",
+      "distributionSha256": "33b76a49e155767d1499b61583770fb7391f65f19841b56bd1cbed7e20e4b26e",
+      "matches": true
+    },
+    {
+      "path": "src/project-readiness.mjs",
+      "baselineSha256": "bdcc26412dce77df32b71bbf8641f7162f1aa741f2c0a86964dce5748d4e5f56",
+      "distributionSha256": "bdcc26412dce77df32b71bbf8641f7162f1aa741f2c0a86964dce5748d4e5f56",
+      "matches": true
+    },
+    {
+      "path": "src/public-resources.mjs",
+      "baselineSha256": "26cb58bf4f137cf0279af026b0de0987def46dc816a50acf571509188d4fe962",
+      "distributionSha256": "26cb58bf4f137cf0279af026b0de0987def46dc816a50acf571509188d4fe962",
+      "matches": true
+    },
+    {
+      "path": "src/device-modules.mjs",
+      "baselineSha256": "34eebc3853c755977c5bad5e7defa4a901e32e53ec0390d4539a54a92f90e429",
+      "distributionSha256": "34eebc3853c755977c5bad5e7defa4a901e32e53ec0390d4539a54a92f90e429",
+      "matches": true
+    },
+    {
+      "path": "src/portable-design-upgrade.mjs",
+      "baselineSha256": "88c31d25f0bfda3b9a668a1506bd48af119f3d51fc928103b3b33d0130beee85",
+      "distributionSha256": "88c31d25f0bfda3b9a668a1506bd48af119f3d51fc928103b3b33d0130beee85",
+      "matches": true
+    },
+    {
+      "path": "web/vendor/flash-core.js",
+      "baselineSha256": "b6c7120a2bc8e347cf040339f0cff81e8ef9199eb923ad76921146a31313db16",
+      "distributionSha256": "b6c7120a2bc8e347cf040339f0cff81e8ef9199eb923ad76921146a31313db16",
+      "matches": true
+    },
+    {
+      "path": "src/studio-account.mjs",
+      "baselineSha256": "342ed5a76e722a031f7efa51eb8a35b32d7bad812f7c19eb2e4a49ac0579d591",
+      "distributionSha256": "342ed5a76e722a031f7efa51eb8a35b32d7bad812f7c19eb2e4a49ac0579d591",
+      "matches": true
+    },
+    {
+      "path": "src/studio-platform.mjs",
+      "baselineSha256": "b67c835aae8d7ac91155cb0c79170c631c352045cabcbb1be9acf7957d4f302f",
+      "distributionSha256": "b67c835aae8d7ac91155cb0c79170c631c352045cabcbb1be9acf7957d4f302f",
+      "matches": true
+    },
+    {
+      "path": "web/app.js",
+      "baselineSha256": "12ef062c92e14e451624be9e4073cda5dad5bd59d831f855f3e7f2e295921ef2",
+      "distributionSha256": "12ef062c92e14e451624be9e4073cda5dad5bd59d831f855f3e7f2e295921ef2",
+      "matches": true
+    },
+    {
+      "path": "web/index.html",
+      "baselineSha256": "3e138bc2e6b8dd10b1c6c803866903888d1ae557acf41ac4d5e55ed45500e6c2",
+      "distributionSha256": "3e138bc2e6b8dd10b1c6c803866903888d1ae557acf41ac4d5e55ed45500e6c2",
+      "matches": true
+    },
+    {
+      "path": "src/managed-assets.mjs",
+      "baselineSha256": "faa3a14797df4056183a69cc3da4e3ad3a08d1975dc390a54ba70136310d35fc",
+      "distributionSha256": "faa3a14797df4056183a69cc3da4e3ad3a08d1975dc390a54ba70136310d35fc",
+      "matches": true
+    },
+    {
+      "path": "src/png-raster.mjs",
+      "baselineSha256": "b27d4c586e44d9b27aad5c670f3d0ae6931dcbb1958ef3d1de15daa28448d716",
+      "distributionSha256": "b27d4c586e44d9b27aad5c670f3d0ae6931dcbb1958ef3d1de15daa28448d716",
+      "matches": true
+    },
+    {
+      "path": "src/leroyd-c309-recipe.json",
+      "baselineSha256": "8641b5b98a43ba4091c14f71f527efdd1c962143d69167bdfcfc7d950fe09464",
+      "distributionSha256": "8641b5b98a43ba4091c14f71f527efdd1c962143d69167bdfcfc7d950fe09464",
+      "matches": true
+    },
+    {
+      "path": "src/device-modules.json",
+      "baselineSha256": "ad5e9899bfd410974d3589ebb6642b5c914cb53cab008f2f37cebfea3cb876c6",
+      "distributionSha256": "ad5e9899bfd410974d3589ebb6642b5c914cb53cab008f2f37cebfea3cb876c6",
+      "matches": true
+    },
+    {
+      "path": "web/studio-account.js",
+      "baselineSha256": "573031fefc42b22d7f1199d898f21b2c34f67f4031ef6b6239695751c469a262",
+      "distributionSha256": "573031fefc42b22d7f1199d898f21b2c34f67f4031ef6b6239695751c469a262",
+      "matches": true
+    },
+    {
+      "path": "web/local-install-source.js",
+      "baselineSha256": "2813f7c2fd3c4daad660f50f0298f6268df761e34e4b16870919b924aad22ea7",
+      "distributionSha256": "2813f7c2fd3c4daad660f50f0298f6268df761e34e4b16870919b924aad22ea7",
+      "matches": true
+    },
+    {
+      "path": "docs/API.md",
+      "baselineSha256": "619ffc0c0133975b7dcf9f813e0f377989edc5e647df38192da742dca4c2fb68",
+      "distributionSha256": "619ffc0c0133975b7dcf9f813e0f377989edc5e647df38192da742dca4c2fb68",
+      "matches": true
+    },
+    {
+      "path": "docs/SDK.md",
+      "baselineSha256": "ec57a008b31d2a82d6c5887f6374226d04d2ca9e62131bfa6b92b62aa7177069",
+      "distributionSha256": "ec57a008b31d2a82d6c5887f6374226d04d2ca9e62131bfa6b92b62aa7177069",
+      "matches": true
+    },
+    {
+      "path": "docs/LOCAL_STUDIO.md",
+      "baselineSha256": "4344b9fc54cd28127317d80488331082fe885c36d986f48ab83a2db385653af9",
+      "distributionSha256": "4344b9fc54cd28127317d80488331082fe885c36d986f48ab83a2db385653af9",
+      "matches": true
+    },
+    {
+      "path": "src/platform-guides/API.md",
+      "baselineSha256": "619ffc0c0133975b7dcf9f813e0f377989edc5e647df38192da742dca4c2fb68",
+      "distributionSha256": "619ffc0c0133975b7dcf9f813e0f377989edc5e647df38192da742dca4c2fb68",
+      "matches": true
+    }
+  ]
+}

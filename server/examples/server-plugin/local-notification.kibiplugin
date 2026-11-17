@@ -1,0 +1,15 @@
+{
+  "format": "kibi-plugin",
+  "manifestVersion": 1,
+  "sdkVersion": "1.0",
+  "id": "local-notification",
+  "version": "0.1.0",
+  "name": "Локальное уведомление",
+  "description": "Декларативный пример структуры пакета. Проверка не устанавливает модуль и не создаёт уведомления.",
+  "capabilities": [],
+  "permissions": [],
+  "settings": [
+    { "key": "prefix", "label": "Подпись события", "type": "text", "default": "Киби", "required": false }
+  ],
+  "secrets": []
+}

@@ -1,0 +1,341 @@
+{
+  "schemaVersion": 1,
+  "boardId": "kibi-ds02-s3-16m",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "size": 2421,
+      "sha256": "60652a41591579838081768bd6497b551a3976a234bcdddca0035ca81fca89bb"
+    },
+    {
+      "path": "board.json",
+      "size": 6869,
+      "sha256": "74c1dcd37618e6d9c59946989c3796d8c67fb7a63f830b6d626012f48245c5c6"
+    },
+    {
+      "path": "firmware/Feature.h",
+      "size": 10435,
+      "sha256": "b6a13cfed1fd3aabaf48cba82247bc75d24f0d5868dd9275dbac2fefb1fa536a"
+    },
+    {
+      "path": "firmware/README.md",
+      "size": 13804,
+      "sha256": "d39141871582ec48c9fca6ea6069b430522eabfe98bd0c9882ea05a167227ba3"
+    },
+    {
+      "path": "firmware/ai.h",
+      "size": 45686,
+      "sha256": "9d4d419693fe9f91cfca0af568e0f94cba75493cf7603d7a41e82ca218fc99ab"
+    },
+    {
+      "path": "firmware/animation_rules.h",
+      "size": 4495,
+      "sha256": "39e1bde596551aef6eb1df4de10574226660d50bd24c8d7d31d2f2524eb952d4"
+    },
+    {
+      "path": "firmware/app.h",
+      "size": 49529,
+      "sha256": "44cb547c6d0849693e9cb60fee491056cb6eb6b0df6363428340b45693e73d6b"
+    },
+    {
+      "path": "firmware/app_core.h",
+      "size": 4238,
+      "sha256": "cc1bd9838bf7b7cf14564d808c0d9df7b467a85e6e034eea0967e5ae1038775a"
+    },
+    {
+      "path": "firmware/app_feature.h",
+      "size": 510,
+      "sha256": "5950f3f08b4597ffb5746fb8da789b2e0f082a7679a82f134e522f8299d6df01"
+    },
+    {
+      "path": "firmware/app_view.h",
+      "size": 5998,
+      "sha256": "7c6fa9b200670bc1327d722e75d021b9a6ae80324015f1474de34dfa9bc47074"
+    },
+    {
+      "path": "firmware/assistant.h",
+      "size": 22890,
+      "sha256": "a29469c0e1352e5023f3dae2c51224ed206408bc4e9b4be7c049478be1fabcc4"
+    },
+    {
+      "path": "firmware/audio_codec_power.h",
+      "size": 21806,
+      "sha256": "1923172d1aff4be60a68bd148d4256c70fabf9d4716e0e8dbf486b9529bb49d4"
+    },
+    {
+      "path": "firmware/audio_file.h",
+      "size": 10013,
+      "sha256": "8dcfa10140af7457a8b0b788b2be162ee4f1e77f1d97b957e622d2f5976f7165"
+    },
+    {
+      "path": "firmware/calories.h",
+      "size": 5423,
+      "sha256": "606f5ac3226f6c03faf5a962bd84c3661c904653b516c219c79365a93d1a8658"
+    },
+    {
+      "path": "firmware/character_animation.h",
+      "size": 29479,
+      "sha256": "288deeaf32ce330ac2dcd04b2c2204480da89481ba4b670713493ad390c4f6fe"
+    },
+    {
+      "path": "firmware/cloud_voice.h",
+      "size": 10996,
+      "sha256": "fc5e1a51e5ddafaaf13125eb66b22703557d9cc74c5cb6592bcdbf7a13311df8"
+    },
+    {
+      "path": "firmware/cloud_voice_config.h",
+      "size": 888,
+      "sha256": "c03053b0de6fa399908b298391081604745571378282bc5703a92ae0b39dd2fe"
+    },
+    {
+      "path": "firmware/cloud_voice_protocol.h",
+      "size": 9140,
+      "sha256": "15c46cccecb7a8849eff57f62344c00caccdb5b56ed8056b6df8adb72dc62347"
+    },
+    {
+      "path": "firmware/config.h",
+      "size": 1642,
+      "sha256": "50b55a5a4da7e81196df71cb175cbcf43b73956f609aa8ad20feca9465fba344"
+    },
+    {
+      "path": "firmware/daily_weather.h",
+      "size": 12530,
+      "sha256": "e2ffeb84f99a75c36b8e282d077e4a38bf4f63e5a979e6d0c58b6bc235386e6c"
+    },
+    {
+      "path": "firmware/design.h",
+      "size": 10146,
+      "sha256": "709768974af09fdd7f09d0342db43a52b804d2228d8471a3a1986e986e48290f"
+    },
+    {
+      "path": "firmware/device_inbox.h",
+      "size": 8669,
+      "sha256": "e83e9194935c40f3ec2d3edf75d347ae6dc605e83a94bf55da3a138225ae6b2b"
+    },
+    {
+      "path": "firmware/device_poll.h",
+      "size": 5063,
+      "sha256": "9e197b8899d0fa2247dc8cf6120712a472bc95ddd01ca251a9217ff09671ed67"
+    },
+    {
+      "path": "firmware/device_sync.h",
+      "size": 75303,
+      "sha256": "7326e76a1af4c2bc46afb0a58ad580b99bcef6eecea6fc2c52cdd5212fbf5f7c"
+    },
+    {
+      "path": "firmware/display_touch.h",
+      "size": 25632,
+      "sha256": "02d824e03d4ff8faf2e742b53d7abf45c995ee5d8bf9bba710c12d4728acd67a"
+    },
+    {
+      "path": "firmware/embedded_assets.h",
+      "size": 1538725,
+      "sha256": "070bb82f0d9a0f9d1c397957141023cb6662b50d1b925cdfec2c1ccdc4d94ef3"
+    },
+    {
+      "path": "firmware/fullscreen_page.h",
+      "size": 4028,
+      "sha256": "aa760dffe9123313e692beda38cd29cbd7415a9fbdcc01a95a643bedeee5bb1e"
+    },
+    {
+      "path": "firmware/http_json.h",
+      "size": 14060,
+      "sha256": "0d71113432682654d8e08aa06fa8c31711db3d7ceb4ffb90127d7fef5c97661a"
+    },
+    {
+      "path": "firmware/kibi-dependencies.json",
+      "size": 98,
+      "sha256": "6b1a59e5a0395a0f5c7f8fe03366866a6a027a4750ac92c91f12c815069ac7c9"
+    },
+    {
+      "path": "firmware/kibi_screen_config.h",
+      "size": 470,
+      "sha256": "705ab64a2844cf21810890ba70e0ae0fbf0ebbdc44abbd0d8e08378ed0ad0d24"
+    },
+    {
+      "path": "firmware/kibi_typography.h",
+      "size": 7570,
+      "sha256": "3ad545b65a62ea6a66d81d7eff53f72db17dfd5f332f91b0c51b38355e7d9be7"
+    },
+    {
+      "path": "firmware/kibi_typography_data.h",
+      "size": 397424,
+      "sha256": "8f1048a965bd591791eb932bb03061fbcfefd562c5823d884e743b9c892afbc6"
+    },
+    {
+      "path": "firmware/menu.h",
+      "size": 20723,
+      "sha256": "6dd7a32ee5f38f9ed7b0a34ecad73ed87370fe0fbecd6264626676c9a8f62d55"
+    },
+    {
+      "path": "firmware/menu_pages.h",
+      "size": 4130,
+      "sha256": "655d9575d6718bc0015ea7a1355c87644a4b50bc8bb493c6e736c53d7622020a"
+    },
+    {
+      "path": "firmware/microphone_filter.h",
+      "size": 1935,
+      "sha256": "3760a2727455652b760dcefd458af995e246e04992372622520e0415508ef5f5"
+    },
+    {
+      "path": "firmware/microphone_i2s.h",
+      "size": 5789,
+      "sha256": "4464f7bff6c97b522d75694bfc9d749faae003de71885362efab5a4f1e44ce44"
+    },
+    {
+      "path": "firmware/network_gate.h",
+      "size": 5200,
+      "sha256": "a499bfd40b9d29bfd854dc7c1560d8a9e1b8e344385426f279bef400a147eddd"
+    },
+    {
+      "path": "firmware/note_deletions.h",
+      "size": 6936,
+      "sha256": "f97709b0b655f74bf085c61a18223c6deb57846c474861a6b8f9f3c9eb38c844"
+    },
+    {
+      "path": "firmware/notes.h",
+      "size": 27823,
+      "sha256": "c8f4b67d5456fef108f3927165a8b15f878908e934ff2a412779ad9cd867df80"
+    },
+    {
+      "path": "firmware/notifications.h",
+      "size": 6871,
+      "sha256": "e04d4a0f27c8dfaa3ba3f2ab28a89667964509f162702a2b17b044940892dcc2"
+    },
+    {
+      "path": "firmware/power.h",
+      "size": 3031,
+      "sha256": "9f38ebd326268d3cb395bb2e9bc358f180c5c145330554320c29d98660c849c5"
+    },
+    {
+      "path": "firmware/power_management.h",
+      "size": 5559,
+      "sha256": "4e91470c9283f36e566a5c2cf460cd33aee2331273996c8bfbb2083a61e58c96"
+    },
+    {
+      "path": "firmware/power_runtime.h",
+      "size": 2765,
+      "sha256": "5f1182c2066924dc2fedf9f3e96faa2614dd9545ddb4c3c6ca89b5d58b103c9c"
+    },
+    {
+      "path": "firmware/power_ui.h",
+      "size": 4374,
+      "sha256": "8ec83fd80c93624f2601a3fec60899ea76390d2a5b8ee272bd06b45224c99539"
+    },
+    {
+      "path": "firmware/project.ino",
+      "size": 986,
+      "sha256": "bc1d7a679207925321e08e9887305d00b8a234fc4bcc9c0168e3c32080a9da2a"
+    },
+    {
+      "path": "firmware/realtime_voice.h",
+      "size": 22445,
+      "sha256": "cf8309e5b144898eed1d0109c362c03218d4163e34680ce06d8c043f7e9c4500"
+    },
+    {
+      "path": "firmware/realtime_voice_messages.h",
+      "size": 2696,
+      "sha256": "274349dd3cf03b628c3161724c9ee444c5d3141a49dc2fda18a2669e1130d5e2"
+    },
+    {
+      "path": "firmware/realtime_voice_protocol.h",
+      "size": 11136,
+      "sha256": "3fea877608c8fb958fd035ed464937ef87ac63d398529515a8470eec3d558d28"
+    },
+    {
+      "path": "firmware/recorder_ui.h",
+      "size": 6032,
+      "sha256": "309ae40f6b9b6cee7f0e09e3f7768b680c3e825bfdef1199030b6d99731611af"
+    },
+    {
+      "path": "firmware/recording_start.h",
+      "size": 4760,
+      "sha256": "ba52f6a17d1b82dbc3a7188b6dea50512def3c37d309d1064c3537a3d251f9fb"
+    },
+    {
+      "path": "firmware/recording_storage.h",
+      "size": 857,
+      "sha256": "da3400e3b03a08ef8da4ee4d2c0d993da13467c5e3f673e87c5e83f868a2356a"
+    },
+    {
+      "path": "firmware/reminder.h",
+      "size": 10565,
+      "sha256": "eb06590dd855728ffc90af789539bd3955b772d7d9477219dde661c732ded388"
+    },
+    {
+      "path": "firmware/server_config.h",
+      "size": 441,
+      "sha256": "41a3fd51beea4903b6323db37e00949a5ceb58c21b4037e8b2c700ec8551dd61"
+    },
+    {
+      "path": "firmware/server_endpoint.h",
+      "size": 3202,
+      "sha256": "68c973bbf3b18f0d2065738de442f84fd8713a595538e7c80d2cfa53543f8fb0"
+    },
+    {
+      "path": "firmware/server_transport.h",
+      "size": 2880,
+      "sha256": "604b95ef06f86e509042e29d948e6047aae70755e10881a519caae3bdb4996c9"
+    },
+    {
+      "path": "firmware/shopping_notes.h",
+      "size": 839,
+      "sha256": "d662f3ea2b99f0cd7e932b5b353209050edc56edea1e247c4633d5b95b72deb6"
+    },
+    {
+      "path": "firmware/state_info.h",
+      "size": 8992,
+      "sha256": "30f0a5b3577071361ae2fc065ea7009b99a9b9ca988c610d02dab534920a23b0"
+    },
+    {
+      "path": "firmware/tls_diagnostics.h",
+      "size": 6085,
+      "sha256": "a1d3cb50a2c361666fa79d893adf20581a3b4e9f5590ca78de3c375c68318de1"
+    },
+    {
+      "path": "firmware/ui_diagnostics.h",
+      "size": 6335,
+      "sha256": "67b6f1e36b8d0289187a4416ab4a0e42a269c456de498a67b7f0e960f5e998b6"
+    },
+    {
+      "path": "firmware/ui_font.h",
+      "size": 3812,
+      "sha256": "366521e35016f3b2b0c58794192ade46840ff56578cec2ab67c4393cdf99a56f"
+    },
+    {
+      "path": "firmware/ui_font_data.h",
+      "size": 365275,
+      "sha256": "46aae15e68b79c1c06124630b893fbb605d5a4797573e8183c3411bb7e7a3d85"
+    },
+    {
+      "path": "firmware/vietnamese_font.h",
+      "size": 3187,
+      "sha256": "d8de338afd073339cf72ad6d78da9e02f4d1fd8b2868510cee332416ed1b013d"
+    },
+    {
+      "path": "firmware/vietnamese_font_data.h",
+      "size": 53860,
+      "sha256": "0c2b7dbf7fcddd9ac73b49d682784efde83e38c3638caa64626c4a84ce1337ef"
+    },
+    {
+      "path": "firmware/voice_preview.h",
+      "size": 3306,
+      "sha256": "093c2e26daead2ceac571eb08c5c6ce6844b2e5a773bea0fc37b09d85d766366"
+    },
+    {
+      "path": "firmware/weather.h",
+      "size": 18861,
+      "sha256": "bf7b8e2e6a904d3e07fc85c2e9ac7c46a6e3163af2964a7ae7170576a815cc06"
+    },
+    {
+      "path": "firmware/wifi.h",
+      "size": 2494,
+      "sha256": "06ef13ced44a002c88151a5e4da4be94848b662959a2ecc9df73d30e5e126e16"
+    },
+    {
+      "path": "project.json",
+      "size": 401,
+      "sha256": "97fbebc7b599602ddb6c98578b10599af37199da62b0ecf6164aa0e0833d38b1"
+    }
+  ]
+}

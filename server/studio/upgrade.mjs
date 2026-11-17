@@ -1,0 +1,409 @@
+#!/usr/bin/env node
+// Offline additive upgrade for the known PUBLIC Studio 0.3 program baseline.
+// Only the explicit program paths below are read. Never enumerate a Studio root.
+import { constants } from 'node:fs';
+import { lstat, realpath, open, mkdir, rename, rm, rmdir } from 'node:fs/promises';
+import { dirname, join, resolve, parse, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash, randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import {patchPortableDesignProgram,restorePortableDesignProgram} from './portable-design-upgrade.mjs';
+import {patchNewProjectProgram,restoreNewProjectProgram} from './new-project-upgrade.mjs';
+import {patchDeviceModuleProgram,restoreDeviceModuleProgram} from './module-upgrade.mjs';
+import {patchAutomaticBuildProgram,restoreAutomaticBuildProgram} from './automatic-build-upgrade.mjs';
+import {patchFullInstallProgram,restoreFullInstallProgram} from './full-install-upgrade.mjs';
+import {FRESH_SERVER_BASELINES,upgradeFreshServerProgram} from './fresh-server-upgrade.mjs';
+import {FRESH_UI_BASELINES,upgradeFreshUiProgram} from './fresh-ui-upgrade.mjs';
+
+const RELEASE = 'studio-platform-2026-11-17-complete-r3';
+const DEFAULT_SOURCE = fileURLToPath(new URL('../', import.meta.url));
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
+const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+const owned = info => typeof process.getuid !== 'function' || info.uid === process.getuid();
+const failure = (code, path, extra = {}) => Object.assign(new Error(code), { code, ...(path ? { path } : {}), ...extra });
+
+// These hashes describe public KibiVirtual-dev program files only. No private
+// Studio baseline, user project, setting, credential or machine path is embedded.
+// afterSha256 denotes the reviewed pre-r2 lineage root, not a guessed final hash.
+export const PUBLIC_STUDIO_BASELINES = Object.freeze(Object.fromEntries(Object.entries({
+  'src/server.mjs': ['226a1c0a95171bf6d53f546f2cb5ee58e0ee83fee585766b5a9dbee99f4f7975', 'c5b9c0281509288d5b4985678ffe38f93306dad5aa9fdeb9a0b2a828ca9d9bb6', '6add6c045ceafa8e4fc001c6f0da24731a7f4a05803c0bf7d4e13a0a96acdab2'],
+  'src/project-store.mjs': ['bc029db931d3aa867c09e15ca3d78ec53082297a212d9a49576fba37030747a7', '57e4b720952f84223ad71521137ea6ec1e9306d16a443562f3186cff73c50c9b', 'd88617dfed845479f7703351bdee3ce49997426670c8e84d300fbaf3b1f1dd43'],
+  'src/codex-bridge.mjs': ['40ea4421c0ce3a5b6a894a82a95e66bfc5af404dfc0378c354072cc6c503b307', '02be70941a1bf4db6082ed74323e32aa2fc169b43a3adb02ff4cca07041a7ef1'],
+  'web/app.js': ['8d661295104ab31d3e6bec7be9faba407b929fb220f93b8dfee4579a69e7239c', '3218b02722c259cbfcc4e866ff0fee26568c1714375974e46c85cd518a9abd79'],
+  'web/index.html': ['69e7de1cc996c9ffa883659d2cf025bc0cef7b12c2d48d7d4eea5151391d3344', '175c210ff0909e3ed022b7af185688819d7054d7c7239e485e967b31743b57ce'],
+  'native/support.mjs': ['3c81fd1771b52200ad8e640677624360e94f7e348691b9df6a97e2da306fe4af', '3c81fd1771b52200ad8e640677624360e94f7e348691b9df6a97e2da306fe4af'],
+  'src/source-zip.mjs': ['fd181a3f2cd1e521f07a4439c4f370f07742031a02ab1f9e7cc8a8c799dd5525', 'fd181a3f2cd1e521f07a4439c4f370f07742031a02ab1f9e7cc8a8c799dd5525'],
+}).map(([path, [beforeSha256, afterSha256, previousAfterSha256]]) => [path, Object.freeze({ beforeSha256, afterSha256, ...(previousAfterSha256 ? { previousAfterSha256 } : {}) })])));
+
+// Independently reviewed complete program variants. These are public program
+// hashes only; no personalized firmware or app data is authorized by this list.
+export const REVIEWED_STUDIO_VARIANTS=Object.freeze({
+ 'src/server.mjs':Object.freeze(['1c16b5af2dffdf00362b79e7425d184e28efec2b476f579d0e19e7c8dcfee2fe']),
+ 'src/project-store.mjs':Object.freeze(['5c86c457748b342d8525eb1de24939e19a516db0ff7e987b2a9e4e4976eda188']),
+});
+
+// app-server resumes retain their original dynamic tools. A toolset change
+// therefore needs one fresh internal thread, without deleting UI/project data.
+const THREAD_TOOLSET_PATCHES = Object.freeze({
+  'src/server.mjs': [
+    ['];\nconst MIME=', '];\nconst toolsetRevision=sha256(JSON.stringify(dynamicTools));\nconst MIME='],
+    ['buildStore.getThreadId()||undefined', 'buildStore.getThreadId(toolsetRevision)||undefined'],
+    ['buildStore.setThreadId(info.threadId)', 'buildStore.setThreadId(info.threadId,toolsetRevision)'],
+    ['store.getThreadId()||undefined', 'store.getThreadId(toolsetRevision)||undefined'],
+    ['store.setThreadId(info.threadId)', 'store.setThreadId(info.threadId,toolsetRevision)'],
+  ],
+  'src/project-store.mjs': [
+    ['  getThreadId:()=>state.threadId,', '  getThreadId:toolsetRevision=>toolsetRevision===undefined||state.threadToolsetRevision===toolsetRevision?state.threadId:null,'],
+    ['  setThreadId:threadId=>transaction(()=>{state.threadId=threadId;chat.threadId=threadId;}),', '  setThreadId:(threadId,toolsetRevision)=>transaction(()=>{state.threadId=threadId;if(toolsetRevision===undefined)delete state.threadToolsetRevision;else state.threadToolsetRevision=toolsetRevision;chat.threadId=threadId;}),'],
+  ],
+});
+
+/** Pure program-source transformation. Installation must use the pinned guard
+ * in upgradePublicProgram; arbitrary local programs are never authorized here. */
+export function patchThreadToolsetProgram(path, bytes) {
+  if (!Object.hasOwn(THREAD_TOOLSET_PATCHES, path)) throw failure('upgrade_unknown_baseline', path);
+  let source;
+  try { source = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+  catch { throw failure('upgrade_invalid_program', path); }
+  for (const [before, after] of THREAD_TOOLSET_PATCHES[path]) {
+    if (source.split(before).length !== 2) throw failure('upgrade_anchor_mismatch', path);
+    source = source.replace(before, after);
+  }
+  return Buffer.from(source);
+}
+
+const STORE_METHOD = `  installPublicAssets:(input,guard=()=>{})=>transaction(async()=>{
+   guard();if(input?.expectedProjectId!==projectId)throw problem('Активный проект изменился.',409);
+   const installed=await installManagedAssets({sourceDir,existingFiles:snap.files,input,guard});
+   guard();Object.assign(state.protectedHashes,installed.hashes);state.approvedDesignHash=null;state.codeReady=null;state.build=null;await refresh();
+   return{paths:installed.paths};
+  }),
+`;
+const PATCHES = {
+  'src/server.mjs': [
+    ["import http from 'node:http';", "import http from 'node:http';\nimport {createStudioPlatform,platformTools,platformInstructions} from './studio-platform.mjs';"],
+    ['export const dynamicTools=[', 'export const dynamicTools=[\n ...platformTools,'],
+    [" const developerText=await readFile(path.join(root,'prompts/agent-system.md'),'utf8').catch(()=> 'Use Kibi dynamic tools only. Never request or read credentials.');", " const platform=await createStudioPlatform({root,getStore:()=>store,getEpoch:()=>projectEpoch,announce:()=>announce(),mutate:action=>voiceSourceMutation(action)});\n const developerText=(await readFile(path.join(root,'prompts/agent-system.md'),'utf8').catch(()=> 'Use Kibi dynamic tools only. Never request or read credentials.'))+'\\n'+platformInstructions;"],
+    ["if(tool==='kibi_project_context')return{...await store.getAgentContext(),voiceGateway:voiceService.publicInfo(),preview:previewState};", "if(tool==='kibi_project_context')return{...await store.getAgentContext(),...await platform.context(),voiceGateway:voiceService.publicInfo(),preview:previewState};\n  const platformResult=await platform.tool(tool,args,turnGuard);if(platformResult.handled)return platformResult.result;"],
+    ["   if(request.method==='GET'&&route==='/api/state')return send(response,await state());", "   if(await platform.route(request,response,{route,body,send}))return;\n   if(request.method==='GET'&&route==='/api/state')return send(response,await state());"],
+    ['shutdown:async()=>{closed=true;virtualService.close();await voiceService.close();', 'shutdown:async()=>{closed=true;await platform.close();virtualService.close();await voiceService.close();'],
+    ["server.on('close',()=>{closed=true;virtualService.close();", "server.on('close',()=>{closed=true;void platform.close();virtualService.close();"],
+  ],
+  'src/project-store.mjs': [
+    ["import path from 'node:path';", "import path from 'node:path';\nimport {installManagedAssets} from './managed-assets.mjs';"],
+    ['  readSource:value=>transaction(()=>{', STORE_METHOD + '  readSource:value=>transaction(()=>{'],
+  ],
+  'src/codex-bridge.mjs': [
+    ["import { spawn } from 'node:child_process';", "import { spawn } from 'node:child_process';\nimport {platformTools} from './studio-platform.mjs';"],
+    ['const TOOL_NAMES = new Set([', 'const TOOL_NAMES = new Set([...platformTools.map(tool=>tool.name),'],
+  ],
+  'web/app.js': [],
+  'web/index.html': [['</head>', '<link rel="stylesheet" href="./studio-account.css">\n</head>']],
+  'native/support.mjs': [],
+};
+// The UI entry is prepended rather than replacing a framework-specific import.
+function transform(path, bytes) {
+  let source;
+  try { source = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+  catch { throw failure('upgrade_invalid_program', path); }
+  if (path === 'web/app.js') {
+    source = "import {initStudioAccountUI} from './studio-account.js';\n" + source;
+    const anchor = ' }; paintFrame();';
+    if (source.split(anchor).length !== 2) throw failure('upgrade_anchor_mismatch', path);
+    return Buffer.from(source.replace(anchor, " }; initStudioAccountUI({api,mount:document.querySelector('.header-utilities')}); paintFrame();"));
+  }
+  for (const [before, after] of PATCHES[path]) {
+    if (source.split(before).length !== 2) throw failure('upgrade_anchor_mismatch', path);
+    source = source.replace(before, after);
+  }
+  return Object.hasOwn(THREAD_TOOLSET_PATCHES, path) ? patchThreadToolsetProgram(path, Buffer.from(source)) : Buffer.from(source);
+}
+
+function composePreviousReliability(path,bytes){
+ if(path==='src/server.mjs')return patchNewProjectProgram(path,patchPortableDesignProgram(path,bytes));
+ if(path==='src/project-store.mjs')return patchDeviceModuleProgram(path,patchPortableDesignProgram(path,bytes));
+ if(path==='native/support.mjs'||path==='src/source-zip.mjs')return patchDeviceModuleProgram(path,bytes);
+ return Buffer.from(bytes);
+}
+function restorePreviousReliability(path,bytes){
+ if(path==='src/server.mjs')return restorePortableDesignProgram(path,restoreNewProjectProgram(path,bytes));
+ if(path==='src/project-store.mjs')return restorePortableDesignProgram(path,restoreDeviceModuleProgram(path,bytes));
+ if(path==='native/support.mjs'||path==='src/source-zip.mjs')return restoreDeviceModuleProgram(path,bytes);
+ return Buffer.from(bytes);
+}
+function composeReliability(path,bytes){
+ const previous=composePreviousReliability(path,bytes);
+ if(path==='web/app.js')return patchFullInstallProgram(path,previous);
+ return path==='src/server.mjs'?patchAutomaticBuildProgram(path,previous):previous;
+}
+function restoreReliability(path,bytes){
+ if(path==='web/app.js')return restoreFullInstallProgram(path,bytes);
+ return restorePreviousReliability(path,path==='src/server.mjs'?restoreAutomaticBuildProgram(path,bytes):bytes);
+}
+
+/** Known legacy programs are transformed into the reliability release. An
+ * unlisted final digest is accepted only when strict inverse transformations
+ * restore a complete reviewed legacy SHA and exact recomposition matches every
+ * input byte. Markers alone never authorize a program. No application runs. */
+export function upgradePublicProgram(path, bytes) {
+  const expected = PUBLIC_STUDIO_BASELINES[path], actual = digest(bytes);
+  const freshServer=FRESH_SERVER_BASELINES[path],freshUi=FRESH_UI_BASELINES[path];
+  if(freshServer&&[freshServer.beforeSha256,freshServer.afterSha256].includes(actual))return upgradeFreshServerProgram(path,bytes);
+  if(freshUi&&[freshUi.beforeSha256,freshUi.afterSha256].includes(actual))return upgradeFreshUiProgram(path,bytes);
+  if (!expected) throw failure('upgrade_unknown_baseline', path);
+  const legacyHashes=[expected.afterSha256,...(REVIEWED_STUDIO_VARIANTS[path]??[])];
+  let legacy;
+  if(legacyHashes.includes(actual))legacy=Buffer.from(bytes);
+  else if(actual===expected.previousAfterSha256 || actual===expected.beforeSha256){
+   legacy=actual===expected.previousAfterSha256 ? patchThreadToolsetProgram(path,bytes) : transform(path,bytes);
+   if(digest(legacy)!==expected.afterSha256)throw failure('upgrade_transform_mismatch',path);
+  }else{
+   // Both the previous r2 and the current r2 must restore a complete reviewed
+   // root and reproduce every original byte. A marker never bypasses a pin.
+   const versions=path==='src/server.mjs'
+    ?[[restoreReliability,composeReliability],[restorePreviousReliability,composePreviousReliability]]
+    :[[restoreReliability,composeReliability]];
+   for(const[restore,compose]of versions)try{
+    legacy=restore(path,bytes);
+    if(legacyHashes.includes(digest(legacy))&&compose(path,legacy).equals(Buffer.from(bytes)))return composeReliability(path,legacy);
+   }catch{}
+   throw failure('upgrade_unknown_baseline',path);
+  }
+  return composeReliability(path,legacy);
+}
+
+const PAYLOADS = Object.freeze([
+  ...['studio-platform.mjs', 'studio-account.mjs', 'public-resources.mjs', 'managed-assets.mjs', 'leroyd-c309-recipe.json','png-raster.mjs','portable-design-upgrade.mjs','project-readiness.mjs','device-modules.mjs','device-modules.json','device-module-install.mjs','device-variants.mjs'].map(name => ({ source: `studio/${name}`, target: `src/${name}` })),
+  ...['studio-account.js', 'studio-account.css'].map(name => ({ source: `studio/${name}`, target: `web/${name}` })),
+  {source:'studio/local-install-source.mjs',target:'web/local-install-source.js'},
+  ...['API.md', 'VOICE.md', 'HARDWARE.md', 'SERVICES.md'].map(name => ({ source: `docs/${name}`, target: `src/platform-guides/${name}` })),
+  ...['kibi_xiaozhi_core.h','kibi_xiaozhi_client.h'].map(name=>({source:`sdk/device/source/${name}`,target:`src/device-sdk/${name}`})),
+]);
+export const STUDIO_PUBLIC_PAYLOADS=PAYLOADS;
+
+// Only these exact previously shipped public payloads may be replaced. An
+// unknown local edit is preserved and rejected, just like an unknown core file.
+const PREVIOUS_PAYLOADS=Object.freeze({
+ 'src/studio-platform.mjs':'a2644ad1de584919fa365429953a5ddcb9f1d28157fbb0f7f73e55dca507b21c',
+ 'src/studio-account.mjs':'6e050e988503f28e4faf9e22a64894f76f31d44592d0d2a5b68ac3910b6b2bf4',
+ 'web/studio-account.js':'701d53b678828b12406e6d6364bcac9cc50b70b3dab0fd1f5c8bfd1bac1d408e',
+ 'web/studio-account.css':'92f65254576822a056b4af72e13adf2721ea412c8109f608e6cb0cf6ccba5379',
+ 'src/platform-guides/API.md':'11f0616682535406e40b58de9390f553fafc2b44db466a8deedc0f22614140f0',
+ 'src/platform-guides/VOICE.md':'a1b2ead5217a8543eee549dda305af02ee120a81368064348fdd078279845637',
+});
+const RECENT_PAYLOADS=Object.freeze({
+ 'src/studio-platform.mjs':'84192821fc4c86a2466c0071d7be58611582bbf99decdcf7715a3295f17ca419',
+ 'src/studio-account.mjs':'5c1bc1836ba397a787b5c67954e4f327ba35bf6fe9c605306383ce221d7dcea0',
+ 'web/studio-account.js':'841a5490c88556576b76779ee2f977b865bb6bdd203d136dccc72ba4a76a6585',
+ 'web/studio-account.css':'c68794b3d62aae840db901f70144210934f5fcbc51bb6d548d44a4ac6cb24c96',
+ 'src/platform-guides/API.md':'49959c8193f0c8dd1e51ca71f60cad23e62550737e293aa05d8e1c211ec219eb',
+ 'src/platform-guides/VOICE.md':'f2ca6c9f5a1be32e6fed4dce765bd17831d2fd370b16427288d54d2f3a80921d',
+});
+// Exact public payloads from studio-platform-2026-11-12-personal-xiaozhi.
+// Captured from its published release manifest, never from installed app data.
+const LATEST_PAYLOADS=Object.freeze({
+ 'src/studio-platform.mjs':'c497b2da9f5f81f4a019dae43ef1412e9160e08d81e90e33a8d39444e1c75f22',
+ 'src/studio-account.mjs':'342ed5a76e722a031f7efa51eb8a35b32d7bad812f7c19eb2e4a49ac0579d591',
+ 'web/studio-account.js':'573031fefc42b22d7f1199d898f21b2c34f67f4031ef6b6239695751c469a262',
+ 'web/studio-account.css':'168c9895a7ade07539de0b81a69c08d840ec01b480f3e288211328bd7366d108',
+ 'src/public-resources.mjs':'2962acd996d4665d9f8b364c45cf2d52f0a5ef1019da3172267b94e8565f7b17',
+ 'src/managed-assets.mjs':'8017d95347362d262746703fd872d163f70d3e41c83219070ccc6a09e0d6266b',
+ 'src/leroyd-c309-recipe.json':'8641b5b98a43ba4091c14f71f527efdd1c962143d69167bdfcfc7d950fe09464',
+ 'src/platform-guides/API.md':'3dcfe6122f5c5a2051f48b009b2cc0c681a9c2415be178d382934c037716feab',
+ 'src/platform-guides/VOICE.md':'a8b8b7e572d1a28ebc7c549fc1647976210b11ef5f85af8bea51fbb0f4e0bb31',
+ 'src/platform-guides/HARDWARE.md':'b26e76f9d9b59f05ce6bf0a43067d2f49c56cd1294d261298ce4e6e3dd7b71e3',
+ 'src/platform-guides/SERVICES.md':'91b4ea475e0f59933bd53ae696dd83cd3600b9c514e9dde09d324fe2b2e2abdd',
+});
+const RELIABILITY_R2_PAYLOADS=Object.freeze({'src/studio-platform.mjs':'ef97959d05277494eb2baeb55b686e1d4851906bb37cd9dc60cdb6963ff0f1e2'});
+
+async function unlinkedPath(input) {
+  let path = resolve(input);
+  if (process.platform === 'darwin') for (const prefix of ['/tmp', '/var']) {
+    if ((path === prefix || path.startsWith(prefix + '/')) && await realpath(prefix) === '/private' + prefix) path = '/private' + path;
+  }
+  let current = parse(path).root;
+  for (const part of path.slice(current.length).split(sep).filter(Boolean)) {
+    current = join(current, part);
+    try { if ((await lstat(current)).isSymbolicLink()) throw failure('upgrade_unsafe_path'); }
+    catch (cause) { if (cause.code === 'ENOENT') break; throw cause; }
+  }
+  return path;
+}
+async function directory(root, relative = '') {
+  const path = await unlinkedPath(join(root, relative));
+  const info = await lstat(path);
+  if (!info.isDirectory() || !owned(info) || (info.mode & 0o022)) throw failure('upgrade_unsafe_path', relative || undefined);
+  return info;
+}
+async function readProgram(root, relative, optional = false) {
+  let handle;
+  try {
+    const path = await unlinkedPath(join(root, relative));
+    await directory(root, dirname(relative) === '.' ? '' : dirname(relative));
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const info = await handle.stat();
+    if (!info.isFile() || !owned(info) || info.nlink !== 1 || (info.mode & 0o022) || info.size > MAX_FILE_BYTES) throw failure('upgrade_unsafe_file', relative);
+    const bytes = await handle.readFile();
+    if (bytes.length > MAX_FILE_BYTES) throw failure('upgrade_unsafe_file', relative);
+    return { bytes, sha256: digest(bytes), mode: info.mode & 0o777, ino: info.ino, dev: info.dev };
+  } catch (cause) {
+    if (optional && cause.code === 'ENOENT') return null;
+    if (cause.code?.startsWith('upgrade_')) throw cause;
+    throw failure(cause.code === 'ENOENT' ? 'upgrade_missing_program' : 'upgrade_unsafe_file', relative);
+  } finally { await handle?.close(); }
+}
+function checkSyntax(relative, bytes) {
+  if (/\.(?:mjs|js)$/.test(relative)) {
+    const result = spawnSync(process.execPath, ['--check', '--input-type=module'], { input: bytes, env: {}, timeout: 5000, maxBuffer: 65536 });
+    if (result.error || result.status !== 0) throw failure('upgrade_invalid_program', relative);
+  } else if (relative.endsWith('.json')) {
+    try { JSON.parse(bytes.toString('utf8')); } catch { throw failure('upgrade_invalid_program', relative); }
+  }
+}
+async function sameProgram(root, entry) {
+  const current = await readProgram(root, entry.path, true);
+  if (entry.before === null) {
+    if (current !== null) throw failure('upgrade_target_changed', entry.path);
+  } else if (!current || current.sha256 !== entry.before.sha256 || current.ino !== entry.before.ino || current.dev !== entry.before.dev || current.mode !== entry.before.mode) {
+    throw failure('upgrade_target_changed', entry.path);
+  }
+}
+async function newFile(path, bytes, mode) {
+  const handle = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+  try { await handle.writeFile(bytes); await handle.chmod(mode); await handle.sync(); }
+  finally { await handle.close(); }
+}
+
+/** No network and no application code execution. onProgress is a trusted host
+ * callback; a thrown callback error uses the same rollback as an I/O failure. */
+export async function upgradeStudio({ root, sourceRoot = DEFAULT_SOURCE, apply = false, onProgress = () => {} } = {}) {
+  if (Number(process.versions.node.split('.')[0]) < 24) throw failure('upgrade_node_24_required');
+  if (typeof root !== 'string' || !root || typeof sourceRoot !== 'string' || !sourceRoot || typeof apply !== 'boolean' || typeof onProgress !== 'function') throw failure('upgrade_invalid_arguments');
+  let target, source;
+  try { target = await unlinkedPath(root); source = await unlinkedPath(sourceRoot); await directory(target); await directory(source); }
+  catch { throw failure('upgrade_unsafe_root'); }
+  const entries = [], prerequisites = [];
+  // Validate every public baseline and all transforms before creating anything.
+  const primary=await readProgram(target,'src/server.mjs');
+  const fresh=Object.values(FRESH_SERVER_BASELINES['src/server.mjs']).includes(primary.sha256);
+  const paths=[...new Set([...Object.keys(PUBLIC_STUDIO_BASELINES),...(fresh?[...Object.keys(FRESH_SERVER_BASELINES),...Object.keys(FRESH_UI_BASELINES)]:[])])];
+  for (const path of paths) {
+    const before = await readProgram(target, path);
+    const next = upgradePublicProgram(path, before.bytes);
+    checkSyntax(path, next);
+    const afterSha256=digest(next);
+    const entry = { path, before, bytes: next, afterSha256, mode: before.mode };
+    (before.sha256 === afterSha256 ? prerequisites : entries).push(entry);
+  }
+  let payloadBytes = 0;
+  for (const payload of PAYLOADS) {
+    const input = await readProgram(source, payload.source);
+    if ((payloadBytes += input.bytes.length) > 8 * 1024 * 1024) throw failure('upgrade_payload_limit');
+    checkSyntax(payload.target, input.bytes);
+    const before = await readProgram(target, payload.target, true);
+    if (before && ![input.sha256,PREVIOUS_PAYLOADS[payload.target],RECENT_PAYLOADS[payload.target],LATEST_PAYLOADS[payload.target],RELIABILITY_R2_PAYLOADS[payload.target]].includes(before.sha256)) throw failure('upgrade_existing_file_conflict', payload.target);
+    const entry = { path: payload.target, before, bytes: input.bytes, afterSha256: input.sha256, mode: before?.mode ?? 0o644 };
+    (before?.sha256 === input.sha256 ? prerequisites : entries).push(entry);
+  }
+  const changes = entries.map(entry => ({ path: entry.path, action: entry.before ? 'patch' : 'create', beforeSha256: entry.before?.sha256 ?? null, afterSha256: entry.afterSha256 }));
+  const report = { ok: true, release: RELEASE, mode: entries.length ? (apply ? 'applied' : 'dry-run') : 'already-current', changes, backupDir: null };
+  if (!apply || entries.length === 0) return report;
+  for (const entry of [...prerequisites, ...entries]) await sameProgram(target, entry);
+
+  const backupDir = join(target, `.kibi-studio-upgrade-${RELEASE}-${randomUUID()}`);
+  const staged = [], committed = [], madeDirectories = [];
+  let phase = 'backup';
+  async function ensureNewDirectory(path, mode, tracked) {
+    try { await mkdir(path, { mode }); if (tracked) madeDirectories.push(path); }
+    catch (cause) { if (cause.code !== 'EEXIST') throw cause; }
+    const info = await lstat(await unlinkedPath(path));
+    if (!info.isDirectory() || !owned(info) || (mode === 0o700 ? (info.mode & 0o777) !== 0o700 : (info.mode & 0o022) !== 0)) throw failure('upgrade_unsafe_path');
+  }
+  async function backupParent(relative) {
+    let parent = backupDir;
+    for (const part of dirname(relative).split(/[\\/]/).filter(part => part && part !== '.')) {
+      parent = join(parent, part); await ensureNewDirectory(parent, 0o700, false);
+    }
+  }
+  async function stage(entry, bytes = entry.bytes, mode = entry.mode) {
+    await directory(target, dirname(entry.path));
+    const temporary = join(target, dirname(entry.path), `.kibi-upgrade-${randomUUID()}.tmp`);
+    staged.push(temporary);
+    await newFile(temporary, bytes, mode);
+    return temporary;
+  }
+  try {
+    await mkdir(backupDir, { mode: 0o700 });
+    await ensureNewDirectory(backupDir, 0o700, false);
+    report.backupDir = backupDir;
+    for (const entry of entries.filter(entry => entry.before)) {
+      await backupParent(entry.path);
+      await newFile(join(backupDir, entry.path), entry.before.bytes, 0o600);
+    }
+    await newFile(join(backupDir, 'upgrade.json'), Buffer.from(JSON.stringify({ release: RELEASE, status: 'prepared', files: changes }, null, 2) + '\n'), 0o600);
+    phase = 'stage';
+    if (entries.some(entry => entry.path.startsWith('src/platform-guides/'))) await ensureNewDirectory(join(target, 'src/platform-guides'), 0o755, true);
+    if (entries.some(entry => entry.path.startsWith('src/device-sdk/'))) await ensureNewDirectory(join(target,'src/device-sdk'),0o755,true);
+    for (const entry of entries) entry.temporary = await stage(entry);
+    for (const entry of [...prerequisites, ...entries]) await sameProgram(target, entry);
+    phase = 'commit';
+    for (let index = 0; index < entries.length; index++) {
+      const entry = entries[index];
+      await onProgress({ phase, path: entry.path, index, total: entries.length });
+      await sameProgram(target, entry);
+      await directory(target, dirname(entry.path));
+      await rename(entry.temporary, join(target, entry.path));
+      committed.push(entry);
+    }
+    phase = 'verify';
+    for (const entry of [...prerequisites, ...entries]) {
+      const actual = await readProgram(target, entry.path);
+      if (actual.sha256 !== entry.afterSha256) throw failure('upgrade_verify_failed', entry.path);
+    }
+    return report;
+  } catch (cause) {
+    const rollbackFailed = [];
+    for (const entry of committed.reverse()) {
+      try {
+        const actual = await readProgram(target, entry.path);
+        if (actual.sha256 !== entry.afterSha256) throw failure('upgrade_target_changed', entry.path);
+        if (entry.before) {
+          const temporary = await stage(entry, entry.before.bytes, entry.before.mode);
+          await rename(temporary, join(target, entry.path));
+          const restored = await readProgram(target, entry.path);
+          if (restored.sha256 !== entry.before.sha256) throw failure('upgrade_verify_failed', entry.path);
+        } else await rm(join(target, entry.path));
+      } catch { rollbackFailed.push(entry.path); }
+    }
+    if (rollbackFailed.length) throw failure('upgrade_rollback_failed', undefined, { backupDir: report.backupDir, phase, rollbackFailed });
+    throw failure(cause.code?.startsWith('upgrade_') ? cause.code : 'upgrade_write_failed', cause.path, { backupDir: report.backupDir, phase, rolledBack: true });
+  } finally {
+    for (const temporary of staged) await rm(temporary, { force: true }).catch(() => {});
+    for (const dir of madeDirectories.reverse()) await rmdir(dir).catch(() => {});
+  }
+}
+
+function argumentsFor(argv) {
+  if (argv.includes('--help') || argv.includes('-h')) return null;
+  const options = {};
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+    if (arg === '--apply' && options.apply === undefined) options.apply = true;
+    else if (arg === '--dry-run' && options.apply === undefined) options.apply = false;
+    else if (arg === '--root' && options.root === undefined && argv[index + 1] && !argv[index + 1].startsWith('--')) options.root = argv[++index];
+    else if (arg === '--source-root' && options.sourceRoot === undefined && argv[index + 1] && !argv[index + 1].startsWith('--')) options.sourceRoot = argv[++index];
+    else throw failure('upgrade_invalid_arguments');
+  }
+  if (!options.root) throw failure('upgrade_invalid_arguments');
+  return options;
+}
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const options = argumentsFor(process.argv.slice(2));
+    if (options === null) console.log('Обновление публичной Studio 0.3, Node 24+.\nПроверка: node studio/upgrade.mjs --root /путь/к/Studio\nПрименение: node studio/upgrade.mjs --root /путь/к/Studio --apply\nStudio должна быть остановлена. Сеть и пользовательские данные не используются.');
+    else console.log(JSON.stringify(await upgradeStudio(options), null, 2));
+  } catch (cause) {
+    console.error(JSON.stringify({ ok: false, code: cause.code?.startsWith('upgrade_') ? cause.code : 'upgrade_failed', ...(cause.path ? { path: cause.path } : {}), ...(cause.backupDir ? { backupDir: cause.backupDir } : {}), ...(cause.rolledBack ? { rolledBack: true } : {}), ...(cause.rollbackFailed ? { rollbackFailed: cause.rollbackFailed } : {}) }));
+    process.exitCode = 1;
+  }
+}

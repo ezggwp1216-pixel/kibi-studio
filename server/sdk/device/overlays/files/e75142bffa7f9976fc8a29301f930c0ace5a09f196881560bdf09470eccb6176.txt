@@ -1,0 +1,12 @@
+import {DEVICE_FIRMWARE_MIGRATIONS} from './device-migrations.mjs';
+
+// This fresh reviewed cohort intentionally retains legacy beginWifi/getJson.
+// No controller-family Wi-Fi/HTTPS migration is compatible with its voice pins.
+export const MODULE_FIRMWARE_MIGRATIONS=Object.freeze({});
+export const REVIEWED_FIRMWARE_MIGRATIONS=Object.freeze({...DEVICE_FIRMWARE_MIGRATIONS});
+const pins=Object.freeze({wifi:'06ef13ced44a002c88151a5e4da4be94848b662959a2ecc9df73d30e5e126e16',http:'0d71113432682654d8e08aa06fa8c31711db3d7ceb4ffb90127d7fef5c97661a'});
+export function moduleReadiness(files,protectedHashes){
+ const current=new Map(files.map(file=>[file.path,file.sha256]));
+ const checked=(name,pin)=>current.get(name)===pin&&protectedHashes?.[name]===pin;
+ return {wifiModuleReady:checked('wifi.h',pins.wifi),apiModuleReady:checked('http_json.h',pins.http)};
+}

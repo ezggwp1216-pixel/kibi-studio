@@ -1,0 +1,992 @@
+{
+  "schemaVersion": "1.0",
+  "id": "kibi-ds02-device-contract",
+  "language": "ru",
+  "guide": "docs/HARDWARE.md",
+  "scope": "Публичный контракт существующей базы устройства; не исполнитель кода, не прошивка и не результат физической проверки.",
+  "evidenceLevels": {
+    "source": "Объявлено и проверено чтением публичных исходников/метаданных.",
+    "host": "Выполнен конкретный локальный тест с указанным результатом.",
+    "target": "Собрано конкретным целевым toolchain; результат относится к этому артефакту.",
+    "device": "Проверено на выбранной физической плате с указанным артефактом.",
+    "provider": "Выполнен отдельный явный запрос к внешнему сервису.",
+    "rule": "Уровни не подменяют друг друга; наличие модуля или source-контракта не доказывает host/target/device/provider успех."
+  },
+  "profile": {
+    "id": "kibi-ds02-s3-16m",
+    "chip": "ESP32-S3",
+    "chipId": 9,
+    "arduinoCoreVersion": "3.3.12",
+    "espIdfVersion": "5.5.5",
+    "toolchain": "esp-x32/2601",
+    "flash": {
+      "bytes": 16777216,
+      "mode": "dio",
+      "frequencyMHz": 40
+    },
+    "psram": {
+      "mode": "opi",
+      "frequencyMHz": 80
+    },
+    "applicationMaximumBytes": 2097152,
+    "applicationOffsets": [
+      65536,
+      2162688
+    ],
+    "display": {
+      "width": 240,
+      "height": 296,
+      "format": "RGB565",
+      "cornerRadiusPx": 62,
+      "framePixels": 71040,
+      "frameBytes": 142080
+    },
+    "variants": [
+      {
+        "id": "basic",
+        "name": "Киби без динамика",
+        "microphone": true,
+        "speaker": false
+      },
+      {
+        "id": "speaker",
+        "name": "Киби с динамиком",
+        "microphone": true,
+        "speaker": true
+      }
+    ],
+    "speakerEnabledCondition": "KIBI_DEVICE_HAS_SPEAKER == 1",
+    "requiredSdkConfig": [
+      "CONFIG_PM_ENABLE",
+      "CONFIG_FREERTOS_USE_TICKLESS_IDLE",
+      "CONFIG_I2S_ISR_IRAM_SAFE",
+      "CONFIG_SPIRAM_MODE_OCT",
+      "CONFIG_SPIRAM_SPEED_80M",
+      "CONFIG_ESPTOOLPY_FLASHFREQ_40M",
+      "CONFIG_ESPTOOLPY_FLASHSIZE_16MB",
+      "CONFIG_MBEDTLS_CERTIFICATE_BUNDLE",
+      "CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL"
+    ],
+    "pins": {
+      "display": {
+        "sclk": 9,
+        "mosi": 10,
+        "dc": 8,
+        "cs": 14,
+        "reset": 18,
+        "backlight": 13
+      },
+      "i2c": {
+        "sda": 12,
+        "scl": 11,
+        "frequencyHz": 100000
+      },
+      "touch": {
+        "address": 21,
+        "irq": 1
+      },
+      "buttons": {
+        "plus": 40,
+        "minus": 39,
+        "power": null,
+        "activeLow": true,
+        "physicalOrderRight": [
+          "plus",
+          "power",
+          "minus"
+        ]
+      },
+      "battery": {
+        "adc": 17,
+        "charging": 47,
+        "chargingActiveLow": true
+      },
+      "audio": {
+        "mclk": 5,
+        "bclk": 15,
+        "ws": 16,
+        "din": 7,
+        "dout": 6,
+        "amplifierEnable": 4,
+        "amplifierActiveHigh": true
+      }
+    },
+    "pinOwnership": "Защищённая платформа; значения служат проверке профиля, не перенастройке из приложения.",
+    "evidence": {
+      "level": "source",
+      "targetVerifiedByThisContract": false,
+      "deviceVerifiedByThisContract": false,
+      "sources": [
+        "templates/kibi-base/board.json",
+        "templates/kibi-base/firmware/config.h"
+      ]
+    }
+  },
+  "snapshots": {
+    "selectionRule": "Сверять manifest/hash и символы каждой подсистемы; номер Studio не определяет совместимость всего SDK.",
+    "auditObservations": [
+      {
+        "id": "public-source-before-alignment",
+        "kind": "public-template",
+        "audioCodecPowerSha256": "a706e3f8832f9fa42cc02b357a8c3b3000bd2ae7b3e9f063c04c595051df3de8",
+        "preparePlayback": false,
+        "deviceWifiController": true,
+        "newHttpsJsonContract": true,
+        "note": "Историческое наблюдение до согласования поставки; не текущий manifest распространяемого пакета."
+      },
+      {
+        "id": "installed-public-template-before-alignment",
+        "kind": "installed-public-template",
+        "audioCodecPowerSha256": "1923172d1aff4be60a68bd148d4256c70fabf9d4716e0e8dbf486b9529bb49d4",
+        "preparePlayback": true,
+        "deviceWifiController": false,
+        "newHttpsJsonContract": false,
+        "note": "Старый Wi-Fi/HTTPS и более новый аудиоинтерфейс; новые сетевые методы не поддерживаются без согласованного обновления SDK."
+      }
+    ],
+    "sharedHeaderSha256": {
+      "firmware/microphone_i2s.h": "4464f7bff6c97b522d75694bfc9d749faae003de71885362efab5a4f1e44ce44",
+      "firmware/microphone_filter.h": "3760a2727455652b760dcefd458af995e246e04992372622520e0415508ef5f5",
+      "firmware/cloud_voice_protocol.h": "15c46cccecb7a8849eff57f62344c00caccdb5b56ed8056b6df8adb72dc62347",
+      "firmware/realtime_voice_protocol.h": "3fea877608c8fb958fd035ed464937ef87ac63d398529515a8470eec3d558d28",
+      "firmware/realtime_voice_messages.h": "274349dd3cf03b628c3161724c9ee444c5d3141a49dc2fda18a2669e1130d5e2",
+      "firmware/audio_file.h": "8dcfa10140af7457a8b0b788b2be162ee4f1e77f1d97b957e622d2f5976f7165"
+    },
+    "migration": "Документация не обновляет существующий проект, удалённый compiler snapshot или прошитый бинарник. Protected-файлы обновляет штатный механизм Studio/сборки."
+  },
+  "initialization": {
+    "editableHooks": {
+      "header": "firmware/app_feature.h",
+      "namespace": "KibiApp::Feature",
+      "signatures": [
+        "void begin(Model&, View::Context&)",
+        "bool tick(Model&, View::Context&, uint32_t now)",
+        "void input(Model&, const Input&, Action)"
+      ]
+    },
+    "protectedOrder": [
+      "portable application Feature::begin",
+      "PowerManagement::begin and loadPower",
+      "LittleFS.begin(false)",
+      "beginDisplay and first draw",
+      "beginStateInfo: ADC2 battery before Wi-Fi",
+      "beginInputBus",
+      "audio standby",
+      "button pullup/ISR",
+      "armWakeSources",
+      "beginTouch",
+      "application Feature::tick"
+    ],
+    "applicationBeginHardwareReady": false,
+    "hardwareWorkerStart": "После protected initialization и проверки готовности используемого модуля; не из раннего portable begin.",
+    "performanceLease": {
+      "header": "firmware/power_management.h",
+      "symbol": "Tamagotchi::PowerManagement::PerformanceLease",
+      "methods": [
+        "held()"
+      ],
+      "ownership": "RAII одного worker после PowerManagement::begin; destructor освобождает CPU-max PM lock."
+    },
+    "concurrency": "Один владелец hardware session; UI передаёт ограниченные команды, не вызывает end параллельно read/write. Cancel инвалидирует поколение/очередь.",
+    "evidence": {
+      "level": "source",
+      "sources": [
+        "templates/kibi-base/firmware/Feature.h",
+        "templates/kibi-base/firmware/app_feature.h",
+        "templates/kibi-base/firmware/power_management.h"
+      ]
+    }
+  },
+  "modules": {
+    "display": {
+      "baseSupport": true,
+      "previewEmulated": false,
+      "header": "firmware/app_view.h",
+      "namespace": "KibiApp::View",
+      "signature": "void render(uint16_t* pixels, size_t count, const Model&, const Context&)",
+      "contextFields": [
+        "nowMs",
+        "online",
+        "loading",
+        "stale"
+      ],
+      "contextOnlineIsRadioEvidence": false,
+      "controller": "JD9853",
+      "spiFrequencyMHz": 40,
+      "protectedSymbols": [
+        "Tamagotchi::prepareDisplayFrame(int offsetY)",
+        "Tamagotchi::presentDisplayFrame()",
+        "Tamagotchi::displayReadyToPresent()",
+        "Tamagotchi::displayIsAwake()",
+        "Tamagotchi::setDisplayBrightnessPercent(uint8_t)",
+        "Tamagotchi::setDisplayAwake(bool)",
+        "Tamagotchi::tickDisplayPower(uint32_t)"
+      ],
+      "ownership": "Приложение рисует в переданный framebuffer/count. Present/SPI/ориентация/сон принадлежат protected adapter; без второго владельца дисплея.",
+      "coordinates": "Native 240x296; защищённая сериализация уже компенсирует физические 180 градусов. Не инвертировать touch повторно.",
+      "typography": {
+        "header": "firmware/kibi_typography.h",
+        "font": "Source Sans 3",
+        "license": "SIL OFL 1.1",
+        "format": "prepared AA4 glyphs into native RGB565",
+        "framebufferAllocatedByHelper": false
+      },
+      "evidence": {
+        "level": "source",
+        "sources": [
+          "templates/kibi-base/board.json",
+          "templates/kibi-base/firmware/app_view.h",
+          "templates/kibi-base/firmware/display_touch.h"
+        ]
+      }
+    },
+    "touch": {
+      "baseSupport": true,
+      "previewEmulated": false,
+      "controller": "CST810",
+      "transport": "shared Wire polling at 0x15",
+      "applicationHeader": "firmware/app_core.h",
+      "namespace": "KibiApp",
+      "applicationInputKinds": [
+        "Tap",
+        "Swipe"
+      ],
+      "fields": [
+        "kind",
+        "x",
+        "y",
+        "dx",
+        "dy",
+        "durationMs"
+      ],
+      "protectedRawKinds": [
+        "Down",
+        "Move",
+        "Up",
+        "Cancel"
+      ],
+      "protectedRawSymbols": [
+        "Tamagotchi::DisplayTouchDetail::TouchKind",
+        "Tamagotchi::DisplayTouchDetail::TouchEvent",
+        "Tamagotchi::nextTouchEvent(TouchEvent&)"
+      ],
+      "tap": {
+        "maximumDisplacementPx": 10,
+        "sameHitTargetRequired": true,
+        "emittedOn": "Up"
+      },
+      "horizontalSwipe": {
+        "minimumDisplacementPx": 28,
+        "mustExceedVerticalDisplacement": true,
+        "maximumDurationMs": 1200,
+        "emittedOn": "Up"
+      },
+      "cancelEmitsApplicationAction": false,
+      "ownership": "Protected adapter потребляет raw очередь; приложение работает с portable Input/reducer, не читает CST810 второй задачей. Сохранить NVS calibration.",
+      "evidence": {
+        "level": "source",
+        "sources": [
+          "templates/kibi-base/firmware/app_core.h",
+          "templates/kibi-base/firmware/Feature.h",
+          "templates/kibi-base/firmware/display_touch.h"
+        ]
+      }
+    },
+    "buttons": {
+      "baseSupport": true,
+      "applicationHeader": "firmware/app_core.h",
+      "namespace": "KibiApp",
+      "inputKinds": [
+        "Plus",
+        "Minus"
+      ],
+      "debounceMs": 35,
+      "edge": "press",
+      "releaseEvent": false,
+      "longHoldEvent": false,
+      "reducer": "Action reduceInput(Model&, const Input&)",
+      "actions": [
+        "None",
+        "NextScreen",
+        "PreviousScreen",
+        "OpenModule",
+        "CloseModule",
+        "Toggle"
+      ],
+      "dispatchOrder": [
+        "power activity",
+        "reduceInput",
+        "Feature::input",
+        "dirty if Action != None"
+      ],
+      "ownership": "Protected GPIO/debounce; application reducer меняет поведение. Feature::input не отменяет уже выполненный reducer. Feature::buttonPress не существует.",
+      "evidence": {
+        "level": "source",
+        "sources": [
+          "templates/kibi-base/firmware/Feature.h",
+          "templates/kibi-base/firmware/app_core.h",
+          "templates/kibi-base/firmware/app_feature.h"
+        ]
+      }
+    },
+    "battery": {
+      "baseSupport": true,
+      "previewEmulated": false,
+      "header": "firmware/state_info.h",
+      "snapshotSymbol": "Tamagotchi::StateInfoDetail::runtime.info",
+      "fields": {
+        "batteryPercent": "-1 unknown/stale, otherwise approximate percent",
+        "chargingKnown": "false before first charging sample",
+        "charging": "charge indicator",
+        "chargingStep": "UI animation state"
+      },
+      "adc": {
+        "unit": "ADC2",
+        "resolutionBits": 12,
+        "attenuation": "ADC_11db",
+        "rawUnit": "ADC counts, not mV",
+        "seriesSamples": 16,
+        "minimumSampleIntervalMs": 2,
+        "initialSeriesBeforeWifi": true,
+        "rejectAnySampleBelow": 64,
+        "rejectAnySampleAbove": 4031
+      },
+      "approximatePercentKnots": [
+        [
+          1985,
+          0
+        ],
+        [
+          2048,
+          20
+        ],
+        [
+          2172,
+          40
+        ],
+        [
+          2296,
+          60
+        ],
+        [
+          2420,
+          80
+        ],
+        [
+          2482,
+          100
+        ]
+      ],
+      "interpolation": "linear with clamp; accepted raw mean smoothed as (3*previous+new)/4",
+      "staleAfterMs": 30000,
+      "invalidSeries": "Retain previous valid until stale; do not replace with zero.",
+      "refreshMs": {
+        "screenOn": 2000,
+        "screenOff": 15000,
+        "charging": 100
+      },
+      "charging": {
+        "activeLow": true,
+        "lowMeansActiveImmediately": true,
+        "clearAfterNoLowMs": 3000
+      },
+      "legacyFullIconAbovePercent": 85,
+      "ownership": "Protected ADC2-before-radio sampling and sleep/wake. Project numeric fields into portable Model in Arduino tick; no device namespace in native View.",
+      "notClaimed": [
+        "voltage measurement",
+        "capacity measurement",
+        "physical charge validation"
+      ],
+      "evidence": {
+        "level": "source",
+        "sources": [
+          "templates/kibi-base/firmware/state_info.h",
+          "templates/kibi-base/firmware/config.h",
+          "templates/kibi-base/firmware/Feature.h"
+        ]
+      }
+    },
+    "wifi": {
+      "baseSupport": true,
+      "previewEmulated": false,
+      "bandGHz": 2.4,
+      "header": "firmware/wifi.h",
+      "namespace": "Tamagotchi::DeviceWifi",
+      "availability": "New controller snapshot only; unsupported on audited legacy installed Wi-Fi header.",
+      "methods": [
+        "Snapshot snapshot()",
+        "void tick(uint32_t now)",
+        "RetryResult requestRetry(uint32_t now)",
+        "ScanRequestResult requestTargetScan(uint32_t now)",
+        "ScanSnapshot scanSnapshot()",
+        "bool cancelTargetScan()"
+      ],
+      "platformOnly": [
+        "StartResult beginAfterPlatformReady()"
+      ],
+      "phaseValues": [
+        "WaitingForPlatform",
+        "NotConfigured",
+        "InvalidConfiguration",
+        "Starting",
+        "Connecting",
+        "ObtainingAddress",
+        "Connected",
+        "Disconnected",
+        "Error"
+      ],
+      "snapshotFields": [
+        "phase",
+        "platformReady",
+        "started",
+        "valid",
+        "ssidPresent",
+        "passwordPresent",
+        "associated",
+        "ipReady",
+        "rssiKnown",
+        "countryKnown",
+        "status",
+        "reason",
+        "error",
+        "rssi",
+        "channel",
+        "countryFirstChannel",
+        "countryChannelCount",
+        "countryPolicy",
+        "attempts",
+        "eventSequence",
+        "lastChangeMs",
+        "lastAttemptAt",
+        "lastRetry"
+      ],
+      "retryResults": [
+        "Accepted",
+        "AlreadyConnected",
+        "Connecting",
+        "Cooldown",
+        "InvalidConfiguration",
+        "NotReady",
+        "Busy",
+        "DriverError"
+      ],
+      "scanRequestResults": [
+        "Accepted",
+        "AlreadyConnected",
+        "Connecting",
+        "Cooldown",
+        "InvalidConfiguration",
+        "NotReady",
+        "Busy"
+      ],
+      "scanStatusValues": [
+        "Idle",
+        "Queued",
+        "Running",
+        "Complete",
+        "Busy",
+        "Cancelled",
+        "TimedOut",
+        "Failed",
+        "CleanupFailed"
+      ],
+      "scanSnapshotFields": [
+        "status",
+        "known",
+        "found",
+        "cleanupComplete",
+        "rssi",
+        "channel",
+        "authmode",
+        "error",
+        "requestedAt",
+        "finishedAt"
+      ],
+      "internetReadyField": "ipReady",
+      "acceptedMeansComplete": false,
+      "cooldownMs": 30000,
+      "scanBudgetMs": 8000,
+      "scanCleanupBudgetMs": 500,
+      "scanScope": "configured target summary only; no SSID list",
+      "ownership": "Protected platform initializes after ADC2 and services controller; SDK AutoReconnect retained. Application requests bounded retry/target scan; no WiFi.begin/mode/reconfiguration or boot hook.",
+      "blocking": "Commands queue work; read result from later snapshot. Explicitly test stopped/start-failure recovery in the selected controller snapshot.",
+      "evidence": {
+        "level": "source",
+        "sources": [
+          "templates/kibi-base/firmware/wifi.h",
+          "templates/kibi-base/board.json"
+        ]
+      }
+    },
+    "time": {
+      "baseSupport": true,
+      "previewEmulated": false,
+      "mechanism": "firmware NTP",
+      "snapshotSymbol": "Tamagotchi::StateInfoDetail::runtime.info",
+      "fields": {
+        "hour": "-1 until known",
+        "minute": "-1 until known"
+      },
+      "tlsRule": "Await valid time for certificate checks; never disable TLS validation.",
+      "evidence": {
+        "level": "source",
+        "sources": [
+          "templates/kibi-base/board.json",
+          "templates/kibi-base/firmware/state_info.h"
+        ]
+      }
+    },
+    "https": {
+      "baseSupport": true,
+      "previewEmulated": false,
+      "arduinoOnly": true,
+      "header": "firmware/http_json.h",
+      "namespace": "Tamagotchi::Https",
+      "availability": "New public snapshot; audited installed legacy header is a different contract, not assumed supported.",
+      "signature": "JsonResult requestJson(const char* url, const char* post, JsonDocument& output, const JsonDocument& filter, const JsonOptions& options={})",
+      "getCondition": "post == nullptr",
+      "postCondition": "post is serialized JSON",
+      "authorizationHelpers": [
+        "bearerAuth",
+        "apiKeyAuth",
+        "anthropicAuth"
+      ],
+      "maximumRequestBytes": 262144,
+      "maximumResponseBytes": 16384,
+      "defaultMaximumMs": 20000,
+      "maximumMs": 90000,
+      "followsRedirects": false,
+      "automaticRetries": false,
+      "providerProtocolImplemented": false,
+      "ownership": "Synchronous worker call, never UI tick/renderer or ISR. Limit retries and memory; fixed trusted TLS target; no secrets in logs.",
+      "evidence": {
+        "level": "source",
+        "sources": [
+          "templates/kibi-base/firmware/http_json.h",
+          "templates/kibi-base/board.json"
+        ]
+      }
+    },
+    "microphone": {
+      "baseSupport": true,
+      "variants": [
+        "basic",
+        "speaker"
+      ],
+      "previewEmulated": false,
+      "requiresApplicationIntegration": true,
+      "headers": [
+        "firmware/microphone_i2s.h",
+        "firmware/audio_codec_power.h",
+        "firmware/microphone_filter.h"
+      ],
+      "microphoneOnlySymbols": [
+        "Tamagotchi::MicrophoneI2s::StandardDriver",
+        "Tamagotchi::MicrophoneI2s::Capture<Driver>",
+        "Tamagotchi::MicrophonePower::Codecs<Bus>",
+        "Tamagotchi::MicrophonePower::Lifecycle<Capture, Codec>",
+        "Tamagotchi::MicrophonePower::StandbyScope<Owner, Observe>"
+      ],
+      "captureMethods": [
+        "bool begin()",
+        "bool start()",
+        "bool stop()",
+        "bool end()",
+        "ReadStatus read(int16_t* stereo, size_t capacity, size_t& frames, uint32_t timeoutMs)",
+        "bool ready() const",
+        "bool running() const",
+        "Counters snapshot()",
+        "float sampleRate()"
+      ],
+      "readStatusValues": [
+        "Ok",
+        "TimedOut",
+        "Error"
+      ],
+      "i2s": {
+        "port": 0,
+        "role": "master",
+        "mode": "Philips standard",
+        "sampleRateHz": 16000,
+        "sampleBits": 16,
+        "slots": 2,
+        "mclkMultiple": 256,
+        "dmaDescriptors": 8,
+        "dmaFramesPerDescriptor": 512,
+        "dmaPayloadBytes": 16384
+      },
+      "capacityUnit": "stereo frames; allocate two int16_t per frame, bytes = capacity*4",
+      "partialRead": "Aligned frames may be returned with TimedOut; process only returned frame count.",
+      "wake": {
+        "readyBudgetMs": 600,
+        "clockPrerollMs": 80,
+        "i2cTransactionBudgetMs": 20,
+        "sequence": [
+          "acquire legacy audio ownership",
+          "cleanup previous failed standby",
+          "Capture begin/start",
+          "MCLK preroll",
+          "ES7210 kInitializeAdc"
+        ],
+        "adcGainDb": 30
+      },
+      "wakeStatuses": [
+        "Ready",
+        "Cancelled",
+        "TimedOut",
+        "DriverError",
+        "CodecError"
+      ],
+      "shutdown": [
+        "Lifecycle standby powers down ADC/analog/bias with MCLK present",
+        "Capture end disables and deletes channel",
+        "release ownership",
+        "report cleanup failure; retry before new capture"
+      ],
+      "filter": {
+        "symbol": "Tamagotchi::MicrophoneAudio::VoiceFilter",
+        "methods": [
+          "float process(float sample)",
+          "void reset()"
+        ],
+        "requiredSampleRateHz": 16000,
+        "resetPerCapture": true,
+        "automaticInDuplexRead": false,
+        "aec": false
+      },
+      "ownership": "One capture worker; not concurrent with duplex Session. ISR counters/state in internal DRAM; no network/file/allocation in callbacks. Shared Wire configuration preserved.",
+      "speakerAbsentRule": "DeviceAudio::Session::readMicMono is Unsupported without speaker; use microphone-only lifecycle instead of declaring mic absent.",
+      "evidence": {
+        "level": "source",
+        "deviceVerifiedByThisContract": false,
+        "sources": [
+          "templates/kibi-base/firmware/microphone_i2s.h",
+          "templates/kibi-base/firmware/microphone_filter.h",
+          "templates/kibi-base/firmware/audio_codec_power.h",
+          "templates/kibi-base/board.json"
+        ]
+      }
+    },
+    "audioOutput": {
+      "baseSupport": true,
+      "requiresVariant": "speaker",
+      "previewEmulated": false,
+      "header": "firmware/audio_codec_power.h",
+      "namespace": "Tamagotchi::DeviceAudio",
+      "session": "Session",
+      "methods": [
+        "bool begin()",
+        "bool end()",
+        "bool setVolume(uint8_t percent)",
+        "bool stopPlayback()",
+        "bool ready() const",
+        "bool playing() const",
+        "Error lastError() const",
+        "Status readMicMono(int16_t* out, size_t capacity, size_t& samples, uint32_t timeoutMs=20)",
+        "Status writeSpeakerMono(const int16_t* in, size_t count, size_t& samples, uint32_t timeoutMs=20)"
+      ],
+      "optionalMethods": [
+        "bool preparePlayback()"
+      ],
+      "statusValues": [
+        "Ok",
+        "TimedOut",
+        "Error",
+        "Unsupported",
+        "Busy"
+      ],
+      "errorValues": [
+        "None",
+        "Unsupported",
+        "Busy",
+        "Driver",
+        "Codec",
+        "InvalidArgument",
+        "TimedOut"
+      ],
+      "codecs": {
+        "microphone": "ES7210",
+        "microphoneAddress": 64,
+        "speaker": "ES8311",
+        "speakerAddress": 24,
+        "dacVolumeRegister": 50,
+        "dacZeroDbValue": 191
+      },
+      "i2s": {
+        "port": 0,
+        "role": "master",
+        "mode": "Philips standard full duplex",
+        "sampleRateHz": 16000,
+        "sampleBits": 16,
+        "slots": 2,
+        "mclkMultiple": 256,
+        "dmaDescriptorsPerDirection": 4,
+        "dmaFramesPerDescriptor": 128,
+        "dmaPayloadBytesPerDirection": 2048
+      },
+      "pcmInterface": "signed PCM16 mono; read first stereo slot; scale and duplicate mono into stereo TX",
+      "maxSamplesPerCall": 256,
+      "minSamplesPerCall": 1,
+      "maxTimeoutMs": 20,
+      "defaultVolumePercent": 20,
+      "volumeRangePercent": [
+        0,
+        100
+      ],
+      "initialization": [
+        "after stock display/Wire/PM initialization",
+        "acquire exclusive duplex ownership",
+        "allocate/init/enable shared-port TX and RX",
+        "80ms MCLK preroll",
+        "probe both codecs",
+        "retained ES8311/ES7210 register sequences, including 20ms DAC reset pause"
+      ],
+      "beginIsUiNonblocking": false,
+      "rxTimeout": "May return aligned partial mic samples; does not reset TX.",
+      "txFailure": "Stops playback and invalidates preparation; no full playback ACK.",
+      "stopPlayback": "Amp off; disable TX; preload silence across all four descriptors; enable TX. Flush/cancel operation, not wait-for-drain.",
+      "shutdown": "Amp off; ADC/DAC standby with clocks present; close channels; release lease; preserve and report cleanup failure.",
+      "preparePlayback": {
+        "availability": "Only when exact header/metadata exposes the method; absent in audited old public audio header.",
+        "requires": [
+          "successful begin",
+          "speaker variant",
+          "nonzero volume",
+          "same owning worker with PerformanceLease"
+        ],
+        "waits": false,
+        "submitsPcm": false,
+        "changesPlaying": false,
+        "idempotent": true,
+        "zeroPcmPreservesPreparation": true,
+        "invalidatedBy": [
+          "mute",
+          "stop",
+          "end",
+          "TX failure"
+        ],
+        "guardDurationMs": null,
+        "guardRule": "Caller may use measured nonblocking deadline; keep RX/network serviced, retain every media sample, cancel stale generation/mute.",
+        "provesAnalogReady": false,
+        "provesHeardAudio": false
+      },
+      "completion": {
+        "writeReturnMeans": "PCM copied to DMA, not heard duration",
+        "playingMeansHardwareDrain": false,
+        "publicSessionTxCompletionFence": false,
+        "delayBasedDrainSupported": false,
+        "fullAckRequirement": "Separate verified hardware-backed completion for selected app; successful write/tts-stop/playing are insufficient.",
+        "cleanupResolution": "Only negotiated standalone Xiaozhi playback_resolution rejected after matching normal STOP and terminal decoder/queue/DMA cleanup; not a full ACK."
+      },
+      "ownership": "One worker owns static/global internal-RAM Session and PerformanceLease; no parallel mic owner, no I2S/Wire reconfiguration, no concurrent UI stop/end.",
+      "evidence": {
+        "level": "source",
+        "deviceVerifiedByThisContract": false,
+        "sources": [
+          "templates/kibi-base/firmware/audio_codec_power.h",
+          "templates/kibi-base/board.json"
+        ]
+      }
+    },
+    "storage": {
+      "baseSupport": [
+        "NVS Preferences",
+        "filesystem"
+      ],
+      "requiresApplicationIntegration": true,
+      "previewEmulated": false,
+      "audioHeader": "firmware/audio_file.h",
+      "audioSymbols": [
+        "Tamagotchi::BoundedText",
+        "Tamagotchi::AudioFile::Recorder",
+        "Tamagotchi::AudioFile::recoverPending",
+        "Tamagotchi::AudioFile::markConsumed",
+        "Tamagotchi::AudioFile::acknowledgeSaved"
+      ],
+      "audioFormat": "WAV PCM16 mono at configured kAudioSampleRate=16000; limit uses kAudioMaxSeconds",
+      "boundedTextMemory": "PSRAM-only on Arduino; no internal-DRAM fallback",
+      "fileOperationsBlocking": true,
+      "ownership": "Worker owns capture file and recovery/consume steps; preserve NVS, filesystem, assets, Wi-Fi and unrelated data. Never format on network error or pairing reset.",
+      "evidence": {
+        "level": "source",
+        "sources": [
+          "templates/kibi-base/firmware/audio_file.h",
+          "templates/kibi-base/board.json"
+        ]
+      }
+    },
+    "server": {
+      "optional": true,
+      "requiresApplicationIntegration": true,
+      "apiContract": "docs/API.md",
+      "voiceContract": "docs/VOICE.md",
+      "deviceHttp": [
+        "POST api/pairing/start",
+        "POST api/pairing/poll",
+        "POST api/device/events",
+        "GET api/device/messages",
+        "POST api/device/ack",
+        "POST api/device/chat"
+      ],
+      "identity": "Trusted server account/session scopes devices; no client owner ID. Pairing pollToken differs from visible code; individual token stored privately.",
+      "transport": "Preconfigured trusted HTTPS origin and prefix; no token URL, no bearer redirects, no response-selected new origin.",
+      "javascriptClient": "sdk/client.mjs; not a C++ hardware library or firmware source",
+      "planned": [
+        "schedules",
+        "isolated kibiplugin execution",
+        "registered-user voice"
+      ],
+      "ownership": "Bounded network worker; autonomous functions survive offline. No provider/message test on load/save; use injected transport for automatic checks.",
+      "evidence": {
+        "level": "source",
+        "sources": [
+          "docs/API.md",
+          "docs/SDK.md",
+          "docs/VOICE.md",
+          "sdk/client.mjs"
+        ]
+      }
+    },
+    "bluetooth": {
+      "hardware": "BLE only",
+      "availableInAuditedSdk": false,
+      "status": "blocked-sdk",
+      "reason": "CONFIG_BT_ENABLED disabled; linked host headers/libraries absent",
+      "unsupportedByChip": [
+        "Classic",
+        "BluetoothSerial",
+        "SPP",
+        "A2DP"
+      ],
+      "evidence": {
+        "level": "source",
+        "sources": [
+          "templates/kibi-base/board.json"
+        ]
+      }
+    }
+  },
+  "protocols": {
+    "legacyPcmJob": {
+      "headers": [
+        "firmware/cloud_voice_protocol.h",
+        "firmware/realtime_voice_protocol.h",
+        "firmware/realtime_voice_messages.h"
+      ],
+      "namespace": "Tamagotchi::RealtimeVoice",
+      "version": 2,
+      "messages": [
+        "ready",
+        "job_id",
+        "processing",
+        "transcript",
+        "preview",
+        "command"
+      ],
+      "pcmRingBytes": 1048576,
+      "maximumPcmFrameBytes": 4096,
+      "readyTimeoutMs": 12000,
+      "compatibleWithStandaloneOpusVoice": false,
+      "rule": "Legacy helper names are not standalone server protocol support; do not substitute them for hello/Opus."
+    },
+    "standaloneVoice": {
+      "transport": "TLS WebSocket",
+      "path": "/kibi-xiaozhi/v1",
+      "helloVersion": 1,
+      "audio": {
+        "format": "opus",
+        "sampleRateHz": 16000,
+        "channels": 1,
+        "frameDurationMs": 60,
+        "maximumPacketBytes": 1275
+      },
+      "requiresApplicationCodecAndProtocol": true,
+      "ttsCompletion": "normal tts/stop describes source completion; hardware playback ACK requires actual local completion",
+      "rejectedResolution": {
+        "feature": "playback_resolution",
+        "requiredFeatureValue": true,
+        "provider": "xiaozhi",
+        "state": "rejected",
+        "requiredFields": [
+          "type",
+          "state",
+          "response_id",
+          "playback_id"
+        ],
+        "optionalField": "session_id",
+        "forbiddenField": "audio_end_ms",
+        "prerequisites": [
+          "matching normal tts/stop received",
+          "terminal local decoder/queue/DMA cleanup complete"
+        ],
+        "meansHeardDuration": false
+      },
+      "openaiAcceptsRejectedResolution": false,
+      "contract": "docs/VOICE.md"
+    },
+    "standaloneText": {
+      "route": "POST api/device/chat",
+      "input": "{text}",
+      "output": "{ok:true,text}",
+      "multiTurnMemory": false,
+      "streamingVoice": false,
+      "providerKeyOnDevice": false
+    }
+  },
+  "verification": {
+    "resultsRecordedHere": [],
+    "resultRequiredFields": [
+      "level",
+      "artifact",
+      "procedure",
+      "result"
+    ],
+    "requiredScenarios": [
+      "manifest/profile/variant/symbol compatibility",
+      "native model/reducer/render bounds",
+      "target build exact SDK and slot size",
+      "partial init cleanup and repeated begin/end",
+      "competing audio owners",
+      "mic timeout without TX reset",
+      "bounded partial I/O",
+      "prepare silence/idempotency/mute/unmute/cancel/stale generation",
+      "source end while DMA still pending; no fake ACK",
+      "two sequential microphone captures and two speaker replies",
+      "touch cancel/swipe/hit target and button debounce",
+      "battery unknown/valid/stale/charging and sleep/wake",
+      "Wi-Fi offline/recovery/stopped/start failure",
+      "pairing one-time token/restart/revoke and idempotent message ack",
+      "legacy PCM versus standalone Opus rejection",
+      "restore previous approved working firmware after diagnostic board checks"
+    ],
+    "automaticExternalProviderCalls": false,
+    "note": "A blank results array means this contract carries source evidence only; never infer a physical result from module presence."
+  },
+  "provenance": {
+    "sourcePathBase": "public-sdk-root",
+    "absoluteHostPathsAllowed": false,
+    "officialReferences": [
+      {
+        "url": "https://github.com/espressif/arduino-esp32/releases/tag/3.3.12",
+        "supports": "Arduino3.3.12 is based on ESP-IDF5.5.5"
+      },
+      {
+        "url": "https://github.com/espressif/esp-idf/blob/v5.5.5/components/esp_driver_i2s/include/driver/i2s_common.h",
+        "supports": "mclk_hz, shared RX/TX allocation, callback IRAM/internal-RAM requirements"
+      },
+      {
+        "url": "https://github.com/espressif/esp-idf/blob/v5.5.5/components/esp_driver_i2s/i2s_common.c",
+        "supports": "disable queue/cursor reset, preload, DMA-copy write semantics"
+      }
+    ],
+    "secretsAllowed": false,
+    "physicalVerificationClaimed": false
+  },
+  "release": {
+    "id": "2026-11-09-r1",
+    "audioHeaderSha256": "1923172d1aff4be60a68bd148d4256c70fabf9d4716e0e8dbf486b9529bb49d4",
+    "sourceWifiSha256": "1a7194458882062a18d7b1250bccb99b6712a294c07b9c121e01252c86497d4d",
+    "installedWifiFamily": "legacy",
+    "physicalVerification": "pending"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-11-17",
+  "nodeBase": "node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9",
+  "buildDependencies": "http://snapshot.debian.org/archive/debian/20261116T000000Z bookworm main; http://snapshot.debian.org/archive/debian/20261116T000000Z bookworm-updates main; http://snapshot.debian.org/archive/debian-security/20261116T000000Z bookworm-security main; Debian signed Release metadata and package hashes verified by apt",
+  "ffmpeg": {
+    "version": "9.0.2",
+    "repository": "https://github.com/FFmpeg/FFmpeg.git",
+    "commit": "946fcce07b6dcd0331c8cc609192aeff5e1924f8",
+    "networkProtocols": ["pipe"],
+    "license": "LGPL-2.1-or-later; source and build instructions retained"
+  },
+  "ytDlp": {
+    "version": "2026.10.26",
+    "release": "https://github.com/yt-dlp/yt-dlp/releases/tag/2026.10.26",
+    "assets": {
+      "amd64": {"name": "yt-dlp_linux.zip", "sha256": "f34053415136e55073dd64ba5326d161ecc23ce0e98c081d8752867b37809450"},
+      "arm64": {"name": "yt-dlp_linux_aarch64.zip", "sha256": "74708e707e8fa8177c8347e58152337edf320149cd7b225defd453f7cde47822"}
+    },
+    "architectureSelection": "TARGETARCH when nonempty, otherwise dpkg --print-architecture; only amd64 and arm64 are accepted",
+    "remoteComponents": false,
+    "license": "GPL-3.0-or-later combined official binary; bundled third-party licenses remain in /opt/yt-dlp"
+  }
+}

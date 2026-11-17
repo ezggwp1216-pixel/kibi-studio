@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "releases": [
+    {
+      "release": "studio-server-modules-2026-11-17-r1",
+      "candidate": "studio-full-server-modules-20261117-rc1",
+      "archiveSha256": "1a7e6f168b1d2a0ca64e6b0aff39187ca2f9ca06f0ddc4fe5aa453d759d439ee",
+      "files": {
+        "src/studio-account.mjs": "40cfbb801ce0eff776425e2f26b024275367aa1b8187d876cc45a71fb4f14bf7",
+        "src/studio-platform.mjs": "51dd1a510497b68dea1f8f6d113cec0cd2d47678fb08de977d9dd591f011f6b6",
+        "src/studio-plugins.mjs": "cc9c0f8917522be9682275cf69d80417b917d25b04f1ab6fe0d64eca4d43538b",
+        "web/app.js": "d6f4ac80fd3112e2c38d75435b826f480bb5df36c7ffd1651bf9e4357fa8d437",
+        "web/index.html": "303d29ccf5a8aac2ac149bad4dafe6931547fd455646da763c90128fb57b331f",
+        "web/server-modules.js": "d0b7ace2dc38ff1f695076ce2499c1d7e6873cb67ec7ef3697db9d8c918a6cb4",
+        "web/server-modules.css": "aa19b1c2638f958b4d0449d55ff31a12cbe8bd368551906adfb055797f546425"
+      }
+    },
+    {
+      "release": "studio-server-modules-2026-11-17-r1",
+      "candidate": "studio-full-server-modules-20261117-rc1",
+      "archiveSha256": "8f5685a39b963f39cd5f79f8a023ed4a3d8951cb711c9de4d9c04173b78e8ee0",
+      "files": {
+        "src/studio-account.mjs": "40cfbb801ce0eff776425e2f26b024275367aa1b8187d876cc45a71fb4f14bf7",
+        "src/studio-platform.mjs": "4dffa041a34f4451781803301211533de268127554256840c7973652f1eee79c",
+        "src/studio-plugins.mjs": "cc9c0f8917522be9682275cf69d80417b917d25b04f1ab6fe0d64eca4d43538b",
+        "web/app.js": "d6f4ac80fd3112e2c38d75435b826f480bb5df36c7ffd1651bf9e4357fa8d437",
+        "web/index.html": "303d29ccf5a8aac2ac149bad4dafe6931547fd455646da763c90128fb57b331f",
+        "web/server-modules.js": "d5e93f07d7340508294682d098f209c6d6e2339085922c1fd20de6bda5608782",
+        "web/server-modules.css": "aa19b1c2638f958b4d0449d55ff31a12cbe8bd368551906adfb055797f546425"
+      }
+    }
+  ]
+}

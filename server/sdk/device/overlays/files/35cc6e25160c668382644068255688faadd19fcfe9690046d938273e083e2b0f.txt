@@ -1,0 +1,131 @@
+#!/usr/bin/env node
+// Local public-runtime release. Never enumerate the Studio root or its private state.
+import {constants} from 'node:fs';
+import {open,lstat,realpath,readdir,mkdir,mkdtemp,writeFile,readFile,rename,copyFile,rm} from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import {fileURLToPath} from 'node:url';
+import {createHash,randomUUID} from 'node:crypto';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {renderBootstrapPrompt} from './render-bootstrap.mjs';
+import {inspectSdk} from './check-public-sdk.mjs';
+
+const run=promisify(execFile),sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
+const ROOT_NAME='kibi-studio',ARCHIVE='kibi-studio-local.zip';
+const SDK_ELF='resources/native-sdk/bin/bootloader_dio_40m.elf';
+const TREES=['web','src','native','resources/native-sdk','resources/libraries','resources/licenses','templates/kibi-base','projects/kibi-base/firmware','prompts','docs/reports','docs/modules'];
+const FILES=['scripts/check-public-sdk.mjs','resources/device-contract.json','.gitignore','AGENTS.md','README.md','START_HERE.md','distribution.json','package.json','Запустить Киби Studio.command','scripts/start.mjs','scripts/doctor.mjs','scripts/bootstrap.py','scripts/bootstrap.sh','scripts/bootstrap.mjs','scripts/runtime-lock.json','scripts/launch.sh','resources/board.json','resources/partitions.csv','resources/native-sdk-inventory.json','resources/library-inventory.json','resources/seed-provenance.json','projects/kibi-base/project.json','projects/kibi-base/AGENTS.md','projects/kibi-base/board.json','docs/development-contract.md','docs/hardware/ostb-audio-reference.md','docs/integration-spec.md','docs/implementation-plan.md','docs/progress.md'];
+const REQUIRED=['src/server.mjs','native/support.mjs','native/preview_runner.cpp','web/index.html','web/app.js','web/vendor/kibi-flasher.js','resources/native-sdk/kibi-sdk-provenance.json','resources/libraries/AnimatedGIF/library.properties','resources/libraries/ArduinoJson/library.properties','projects/kibi-base/firmware/project.ino','prompts/agent-system.md','prompts/bootstrap-ru.md'];
+const SECRET_DIRS=new Set(['.studio','.git','.codex','.aws','node_modules','dist','secrets','screenshots','old-design-archive','temp','tmp','backups','artifacts']);
+const SECRET_FILES=/^(?:auth\.json|kibi_project_config\.h|wifi_credentials\.h|wifi_config\.h|secrets?\.(?:h|json)|settings\.json|\.env(?:\..*)?|config\.local\..*)$/i;
+function excluded(relative){
+ const parts=relative.split('/'),sdk=relative.startsWith('resources/native-sdk/');
+ if(parts.some(part=>SECRET_DIRS.has(part.toLowerCase())||(!sdk&&part.toLowerCase()==='private')))return true;
+ if(SECRET_FILES.test(parts.at(-1)))return true;
+ if(relative!=='.gitignore'&&parts.some(part=>part.startsWith('.')&&!(sdk&&['.gitignore','.gitkeep'].includes(part))))return true;
+ if(/\.(?:bin|elf|o|a|zip|tar|gz)$/i.test(relative))return relative!==SDK_ELF&&!(sdk&&/\.a$/i.test(relative));
+ return false;
+}
+export {excluded as isExcludedPackagePath};
+async function canonicalDirectory(root,relative){
+ let current=root;
+ for(const part of relative.split('/').filter(Boolean)){
+  current=path.join(current,part);const info=await lstat(current);
+  if(info.isSymbolicLink()||!info.isDirectory()||await realpath(current)!==current)throw new Error(`Unsafe directory / symlink in package input: ${relative}`);
+ }
+ return current;
+}
+async function safeBytes(root,relative){
+ await canonicalDirectory(root,path.posix.dirname(relative)==='.'?'':path.posix.dirname(relative));
+ const filename=path.join(root,relative),info=await lstat(filename);
+ if(info.isSymbolicLink())throw new Error(`Symbolic link / symlink in package input: ${relative}`);
+ if(!info.isFile())throw new Error(`Special file is not a regular package input: ${relative}`);
+ if(info.size>64*1024*1024)throw new Error(`Package input exceeds public-file limit: ${relative}`);
+ const handle=await open(filename,constants.O_RDONLY|constants.O_NOFOLLOW);
+ try{return await handle.readFile();}finally{await handle.close();}
+}
+function validateResourceInventory(files){
+ const byPath=new Map(files.map(file=>[file.path,file]));
+ let sdk,libraries;
+ try{sdk=JSON.parse(byPath.get('resources/native-sdk-inventory.json').bytes);libraries=JSON.parse(byPath.get('resources/library-inventory.json').bytes);}catch{throw new Error('Public SDK/library inventory is invalid.');}
+ if(!Array.isArray(sdk?.files)||!Array.isArray(libraries))throw new Error('Public SDK/library inventory is invalid.');
+ const expected=new Map();
+ function add(prefix,entries){
+  if(!Array.isArray(entries))throw new Error('Public resource inventory entries are invalid.');
+  for(const entry of entries){
+   if(!entry||typeof entry.path!=='string'||entry.path.startsWith('/')||entry.path.includes('\\')||entry.path.split('/').some(p=>!p||p==='.'||p==='..')||!Number.isSafeInteger(entry.size)||entry.size<0||!/^[a-f0-9]{64}$/.test(entry.sha256))throw new Error('Public resource inventory path/hash is invalid.');
+   const name=prefix+entry.path;if(expected.has(name))throw new Error('Duplicate public resource inventory path.');expected.set(name,entry);
+  }
+ }
+ add('resources/native-sdk/',sdk.files);
+ for(const library of libraries){if(!/^[A-Za-z0-9_-]+$/.test(library?.name))throw new Error('Invalid public library inventory name.');add(`resources/libraries/${library.name}/`,library.files);}
+ for(const file of files.filter(file=>file.path.startsWith('resources/native-sdk/')||file.path.startsWith('resources/libraries/'))){
+  const known=expected.get(file.path);if(!known||known.sha256!==file.sha256||known.size!==file.size)throw new Error(`Public SDK/library inventory hash mismatch: ${file.path}`);
+ }
+ for(const name of expected.keys())if(!byPath.has(name))throw new Error(`Public resource inventory entry excluded or missing: ${name}`);
+}
+async function collectPublicFiles(root){
+ const files=[];let total=0;
+ // The user's editable starter is never a distribution input. Both the initial
+ // project and future-project template come from the sealed public template.
+ const inputPath=relative=>relative.startsWith('projects/kibi-base/')?'templates/kibi-base/'+relative.slice('projects/kibi-base/'.length):relative;
+ async function file(relative){
+  if(excluded(relative))return;
+  let bytes=await safeBytes(root,inputPath(relative));
+  if(relative==='package.json'){
+   const source=JSON.parse(bytes);
+   // The runtime distribution includes no build/install hooks or absent dev tools.
+   bytes=Buffer.from(JSON.stringify({name:source.name||'kibi-studio-local',version:source.version||'0.2.0',private:true,type:'module',engines:{node:'>=22.12'},scripts:{start:'node scripts/start.mjs',doctor:'node scripts/doctor.mjs'}},null,2)+'\n');
+  }
+  total+=bytes.length;if(total>256*1024*1024||files.length>=10000)throw new Error('Public package exceeds release size/file limits.');
+  files.push({path:relative,size:bytes.length,sha256:sha256(bytes),bytes});
+ }
+ async function tree(relative){
+  if(excluded(relative))return;
+  const directory=await canonicalDirectory(root,inputPath(relative));
+  for(const name of (await readdir(directory)).sort()){
+   if(name.includes('\\')||/[\x00-\x1f]/.test(name))throw new Error('Unsafe package input filename.');
+   const child=relative+'/'+name;if(excluded(child))continue;
+   const info=await lstat(path.join(root,inputPath(child)));
+   if(info.isSymbolicLink())throw new Error(`Symbolic link / symlink in package input: ${child}`);
+   if(info.isDirectory())await tree(child);else await file(child);
+  }
+ }
+ for(const relative of FILES)await file(relative);
+ for(const relative of TREES)await tree(relative);
+ const included=new Set(files.map(file=>file.path));for(const required of REQUIRED)if(!included.has(required))throw new Error(`Missing public runtime file: ${required}`);
+ const descriptor=JSON.parse(files.find(file=>file.path==='distribution.json').bytes);
+ if(files.find(file=>file.path==='prompts/bootstrap-ru.md').bytes.toString('utf8')!==renderBootstrapPrompt(descriptor))throw new Error('Launch prompt differs from the public GitHub distribution descriptor. Regenerate it before packaging.');
+ validateResourceInventory(files);
+ const template=JSON.parse(files.find(file=>file.path==='templates/kibi-base/manifest.json')?.bytes||'null');
+ if(template?.schemaVersion!==1||template.boardId!=='kibi-ds02-s3-16m'||!Array.isArray(template.files)||!template.files.length||template.files.length>67)throw new Error('Public starter template manifest is invalid.');
+ const known=new Map();
+ for(const item of template.files){if(typeof item.path!=='string'||known.has(item.path)||!Number.isSafeInteger(item.size)||!/^[a-f0-9]{64}$/.test(item.sha256))throw new Error('Public starter template inventory is invalid.');known.set(item.path,item);}
+ const publicTemplate=files.filter(file=>file.path.startsWith('templates/kibi-base/')&&file.path!=='templates/kibi-base/manifest.json');
+ if(publicTemplate.length!==known.size)throw new Error('Public starter template inventory count mismatch.');
+ for(const file of publicTemplate){const entry=known.get(file.path.slice('templates/kibi-base/'.length));if(!entry||entry.size!==file.size||entry.sha256!==file.sha256)throw new Error('Public starter template hash mismatch: '+file.path);}
+ return files.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
+}
+const ZIP_SCRIPT="import json,sys,zipfile\nfiles=json.load(open(sys.argv[1],encoding='utf-8'))\nwith zipfile.ZipFile(sys.argv[2],'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as z:\n for f in files:\n  info=zipfile.ZipInfo(f['name'],date_time=(2026,1,1,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=(0o100755 if f['name'].endswith('.command') else 0o100644)<<16\n  with open(f['path'],'rb') as source:z.writestr(info,source.read())\n";
+export async function packageStudio({root=fileURLToPath(new URL('../',import.meta.url))}={}){
+ root=await realpath(path.resolve(root));const sdk=await inspectSdk(root);if(!sdk.ok)throw new Error('Public SDK consistency failed: '+sdk.errors.map(e=>e.code).join(','));const files=await collectPublicFiles(root);
+ const scratch=await mkdtemp(path.join(os.tmpdir(),'kibi-public-package-'));
+ try{
+  const entries=[];
+  for(const file of files){const staged=path.join(scratch,'snapshot',file.path);await mkdir(path.dirname(staged),{recursive:true});await writeFile(staged,file.bytes,{mode:0o644,flag:'wx'});entries.push({name:ROOT_NAME+'/'+file.path,path:staged});}
+  const input=path.join(scratch,'zip-input.json'),temporaryArchive=path.join(scratch,ARCHIVE);
+  await writeFile(input,JSON.stringify(entries),{mode:0o600,flag:'wx'});
+  await run('/usr/bin/python3',['-c',ZIP_SCRIPT,input,temporaryArchive],{timeout:120000,maxBuffer:65536});
+  const bytes=await readFile(temporaryArchive),archive={name:ARCHIVE,size:bytes.length,sha256:sha256(bytes)};
+  const manifest={schemaVersion:1,root:ROOT_NAME,archive,fileCount:files.length,totalBytes:files.reduce((sum,file)=>sum+file.size,0),publicSdkExceptions:files.some(file=>file.path===SDK_ELF)?[SDK_ELF]:[],files:files.map(({bytes,...file})=>({...file,path:ROOT_NAME+'/'+file.path}))};
+  const dist=path.join(root,'dist');await mkdir(dist,{recursive:true});await canonicalDirectory(root,'dist');
+  const archivePath=path.join(dist,ARCHIVE),manifestPath=path.join(dist,'kibi-studio-local.manifest.json'),sha256Path=archivePath+'.sha256';
+  const stagedArchive=path.join(dist,'.'+randomUUID()+'.zip');await copyFile(temporaryArchive,stagedArchive);await rename(stagedArchive,archivePath);
+  for(const [filename,content] of [[manifestPath,JSON.stringify(manifest,null,2)+'\n'],[sha256Path,archive.sha256+'  '+ARCHIVE+'\n']]){const temporary=filename+'.'+randomUUID()+'.tmp';await writeFile(temporary,content,{mode:0o644,flag:'wx'});await rename(temporary,filename);}
+  return {archivePath,manifestPath,sha256Path,sha256:archive.sha256,size:archive.size,fileCount:files.length};
+ }finally{await rm(scratch,{recursive:true,force:true});}
+}
+if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+ try{console.log(JSON.stringify(await packageStudio(),null,2));}catch(error){console.error('Public runtime package failed:',error.message);process.exitCode=1;}
+}

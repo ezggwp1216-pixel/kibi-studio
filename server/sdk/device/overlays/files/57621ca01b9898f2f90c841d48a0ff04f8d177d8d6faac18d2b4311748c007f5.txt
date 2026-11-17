@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "kibi-base",
+  "name": "Киби · Новый проект",
+  "boardId": "kibi-ds02-s3-16m",
+  "description": "Базовое приложение Киби: общий нативный интерфейс, экраны, ввод и переносимая логика для нового проекта.",
+  "requirements": {
+    "wifi": false,
+    "api": false
+  },
+  "deviceVariant": "basic"
+}

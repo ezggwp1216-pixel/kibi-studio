@@ -1,0 +1,45 @@
+import {readFile,writeFile,lstat,realpath,rename,chmod,rm} from 'node:fs/promises';
+import path from 'node:path';
+import {createHash,randomUUID} from 'node:crypto';
+const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+const rejected=message=>Object.assign(new Error(message),{status:409});
+
+// Reviewed OSTB speaker adapter chain. `from` remains the original seed.
+// `previous` contains explicit reviewed hashes only; protection cannot downgrade.
+export const DEVICE_FIRMWARE_MIGRATIONS=Object.freeze({
+ 'config.h':Object.freeze({from:'bae9e41fb6db5507c7f2210a19f71e1a3d4fb675d7f8d89fa6afa47d75877c8e',to:'50b55a5a4da7e81196df71cb175cbcf43b73956f609aa8ad20feca9465fba344'}),
+ 'audio_codec_power.h':Object.freeze({from:'26214525baf39d2aaac80589322bae0cea684ff714a04252b7231fef64518d1d',previous:Object.freeze(['a706e3f8832f9fa42cc02b357a8c3b3000bd2ae7b3e9f063c04c595051df3de8']),to:'1923172d1aff4be60a68bd148d4256c70fabf9d4716e0e8dbf486b9529bb49d4'})
+});
+async function directory(dir){const info=await lstat(dir);if(!info.isDirectory()||info.isSymbolicLink()||await realpath(dir)!==dir)throw rejected('Device migration directory symlink запрещён.');}
+async function bytes(file){const info=await lstat(file);if(!info.isFile()||info.isSymbolicLink()||info.nlink!==1||info.size>2*1024*1024||await realpath(file)!==file)throw rejected('Device migration file symlink / hardlink / size boundary rejected.');return readFile(file);}
+async function replace(file,content,temporaryDir){
+ const temporary=path.join(temporaryDir,path.basename(file))+'.'+randomUUID()+'.tmp';
+ try{await writeFile(temporary,content,{mode:0o644,flag:'wx'});await rename(temporary,file);await chmod(file,0o644);}
+ finally{await rm(temporary,{force:true});}
+}
+export async function migrateDeviceAdapters({templateRoot,sourceDir,files,protectedHashes,migrations=DEVICE_FIRMWARE_MIGRATIONS,temporaryDir=path.dirname(sourceDir)}){
+ await directory(sourceDir);await directory(temporaryDir);
+ if(temporaryDir===sourceDir || temporaryDir.startsWith(sourceDir+path.sep))throw rejected('Migration staging must stay outside compiler inputs.');
+ const entries=Object.entries(migrations),current=new Map(files.map(file=>[file.path,file]));
+ if(!entries.every(([name,migration])=>{
+  const actual=current.get(name)?.sha256,protectedHash=protectedHashes[name];
+  const chain=[migration.from,...(migration.previous||[]),migration.to];
+  const actualIndex=chain.indexOf(actual),protectedIndex=chain.indexOf(protectedHash);
+  return actualIndex>=0&&protectedIndex>=0&&protectedIndex<=actualIndex;
+ }))return false;
+ if(Object.entries(protectedHashes).some(([name,expected])=>!migrations[name]&&current.get(name)?.sha256!==expected))return false;
+ const replacements=[];
+ // Recheck actual public files before writing, including old/new interrupted states.
+ for(const [name]of entries)if(hash(await bytes(path.join(sourceDir,name)))!==current.get(name).sha256)throw rejected('Основа Киби изменилась во время обновления. Повторите открытие проекта.');
+ for(const [name,migration]of entries)if(current.get(name).sha256!==migration.to){
+  await directory(templateRoot);const content=await bytes(path.join(templateRoot,name));
+  if(hash(content)!==migration.to)throw rejected('Контрольная сумма обновления звука Киби не совпадает.');
+  replacements.push({name,content});
+ }
+ // Every template checksum is verified before the first mutation. A process
+ // interruption can resume only from the exact reviewed old/new file payloads.
+ for(const item of replacements)await replace(path.join(sourceDir,item.name),item.content,temporaryDir);
+ let changed=replacements.length>0;
+ for(const [name,migration]of entries)if(protectedHashes[name]!==migration.to){protectedHashes[name]=migration.to;changed=true;}
+ return changed;
+}

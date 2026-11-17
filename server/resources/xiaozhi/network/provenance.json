@@ -1,0 +1,33 @@
+{
+  "package": "ws",
+  "version": "8.22.1",
+  "source": "https://registry.npmjs.org/ws/-/ws-8.22.1.tgz",
+  "upstream": "https://github.com/websockets/ws",
+  "archiveSha256": "a5cdb19c7090b816ffc109b6d928d352aa2bce73e38f73bd9678d484a62d2f75",
+  "integrity": "sha512-oyL6OPYme/CmiFvNuGzeoxCJ4nOrZE2O1FwM9MWM1AsGri6nLXB2pg+lNA8aLeXMSav0J6eIVS1j6vUPzUtK9g==",
+  "license": "MIT",
+  "patches": [
+    "Disable optional unpinned bufferutil and utf-8-validate loading; Node built-in/pure JS paths unchanged."
+  ],
+  "files": {
+    "LICENSE": "2b29dcfe0d6471f7e8c92c5fb38c9f93edee10330937055440192f1832b1ecef",
+    "README.md": "159e978944730f24a007b40d126ffcc6c9138d0257fee634fed70cda197b211c",
+    "browser.js": "010da44addea1d88b2b732540c3f1fd0cbcb28926b96623d4c64222e0ead2d0e",
+    "index.js": "924564d5be26d59b9682c4263f68320e48dde7240bd2d1ad17ec305537429dd2",
+    "lib/buffer-util.js": "a0c33cf86eaec6c4316a922a48c0f55219aedd9a4fa032b012afef0293c26015",
+    "lib/constants.js": "391e823142b8b370e55a2fd32b022deaf03b8415c56000009674ebc86a0b4f86",
+    "lib/event-target.js": "c45d3c6e12d170c860c0c3f1a050aa0f864d9806632b609a1e607d675aba128c",
+    "lib/extension.js": "852564f0f6b460287043803eae732666fb5610f676874354fc89f06aa4e986ed",
+    "lib/limiter.js": "e0469d4b83f6ba764b15f80e1766b75c136fbff68f048f4c050f0b1c7f065f69",
+    "lib/permessage-deflate.js": "16a91536988a53c23047ee5882392068728a839a244178c3b09b8c54982f58b0",
+    "lib/receiver.js": "a6ada33c9a2d54eaf595824b821ea89ca2c6395f89aa06755c52142148274884",
+    "lib/sender.js": "b343e24310aeb924e713767fb7cd445bccf4f3cc3504ceb2c56ce76b89c1cf45",
+    "lib/stream.js": "a56fcb6e2b152097ee820b6f5410b1f71e59819b45d08d9f8bda588fe39070ec",
+    "lib/subprotocol.js": "be3f6323d6f549568577dcba9004c1479d95c65a7abb0fe0c582875b9fac0b7c",
+    "lib/validation.js": "c7c4caab06128c16999b1a739cdef78dcdb0309bdba0384707e320160e5c7692",
+    "lib/websocket-server.js": "6d8dd89a841748c80445fd5fcdb5ba8005369b53cc3525135e11304c8b9c55e5",
+    "lib/websocket.js": "9b7bd84b9a95e5bfa66de2dd0ba21aa69ac21013d04c39db066acca66504618b",
+    "package.json": "ac6b2fe23179ebdef3368ecf828f1df1fa361b84f5fb54cca982d716a16df34b",
+    "wrapper.mjs": "fe154662301fd558f935f9c217fccbe7a7dac02ff39e648a000589403ff27c7f"
+  }
+}

@@ -1,0 +1,33 @@
+# Combine with compose.yaml. KIBI_DOMAIN is a DNS hostname, without scheme/path.
+services:
+  kibi:
+    environment:
+      KIBI_PUBLIC_ORIGIN: https://${KIBI_DOMAIN:?Set KIBI_DOMAIN to your DNS hostname}
+  caddy:
+    image: caddy:2.11.9-alpine
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    pids_limit: 100
+    environment:
+      KIBI_DOMAIN: ${KIBI_DOMAIN:?Set KIBI_DOMAIN to your DNS hostname}
+    ports:
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      kibi:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+volumes:
+  caddy_data:
+  caddy_config:

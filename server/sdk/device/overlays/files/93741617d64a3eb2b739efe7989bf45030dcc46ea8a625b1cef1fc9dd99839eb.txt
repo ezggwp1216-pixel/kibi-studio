@@ -1,0 +1,3 @@
+#pragma once
+// Managed by the trusted Kibi board selector; application code cannot edit this file.
+#define KIBI_DEVICE_HAS_SPEAKER 0

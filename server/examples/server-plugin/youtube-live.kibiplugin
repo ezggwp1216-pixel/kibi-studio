@@ -1,0 +1,20 @@
+{
+  "format": "kibi-plugin",
+  "manifestVersion": 2,
+  "sdkVersion": "1.1",
+  "id": "youtube-live",
+  "version": "0.1.0",
+  "name": "Кадр YouTube",
+  "description": "Один беззвучный кадр публичного видео или трансляции. Нужны изолированный исполнитель, media worker, разрешение и привязка к своей Киби.",
+  "capabilities": ["request-handler"],
+  "permissions": ["media:youtube-frame"],
+  "settings": [
+    {"key": "videoId", "label": "ID видео YouTube", "type": "text", "required": true, "default": "4t4AQ15yj1M"},
+    {"key": "fit", "label": "Режим contain или cover", "type": "text", "required": false, "default": "contain"}
+  ],
+  "secrets": [],
+  "server": {
+    "language": "javascript",
+    "source": "export async function onDeviceRequest(input, context) {\n  return { youtubeFrame: { videoId: context.settings.videoId, fit: context.settings.fit || 'contain' } };\n}\n"
+  }
+}
